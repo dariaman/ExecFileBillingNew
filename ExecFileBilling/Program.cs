@@ -124,6 +124,7 @@ namespace ExecFileBilling
                 return;
             }
 
+            Console.WriteLine();
             Console.WriteLine("F I N I S H . . . ");
             Thread.Sleep(5000);
         }
