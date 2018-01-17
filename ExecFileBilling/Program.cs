@@ -27,7 +27,7 @@ namespace ExecFileBilling
         static void Main(string[] args)
         {
             //args = new string[] { "exec" };
-            //args = new string[] { "upload", "6" };
+            //args = new string[] { "upload", "1" };
             if (args.Count() < 1)
             {
                 Console.WriteLine("Parameter tidak terdefenisi...");
@@ -63,13 +63,23 @@ namespace ExecFileBilling
                         Thread.Sleep(5000);
                         return;
                     }
-                    if (!File.OpenRead(FileResult + FileUpload.FileName).CanRead)
+                    try
                     {
-                        Console.WriteLine("File tidak bisa di proses");
+                        if (!File.OpenRead(FileResult + FileUpload.FileName).CanRead)
+                        {
+                            Console.WriteLine("File tidak bisa di proses");
+                            Console.WriteLine("Aplication exit...");
+                            Thread.Sleep(5000);
+                            return;
+                        }
+                    }
+                    catch (Exception ex){
+                        Console.WriteLine(ex.Message);
                         Console.WriteLine("Aplication exit...");
                         Thread.Sleep(5000);
                         return;
                     }
+                    
 
                     var IsData = CekFileInsert(idx, FileUpload.stageTable);
                     // Jika data sudah pernah diinsert atas file tersebut -> exit
@@ -1461,6 +1471,7 @@ WHERE q.`status` IN ('A','C')
                     var Fileproses = GenFile();
                     foreach (FileResultModel item in Fileproses)
                     {
+                        //MapingData(item.Id, item.stageTable);
                         Thread.Sleep(5000);
                         DataProses = new List<DataSubmitModel>();
                         DataProses = PoolDataProsesApprove(item.Id, item.stageTable);
@@ -1486,6 +1497,7 @@ WHERE q.`status` IN ('A','C')
             try
             {
                 var Fileproses = GenFile(id);
+                //MapingData(Fileproses.Id, Fileproses.stageTable);
                 if (Fileproses == null) return;
                 DataProses = new List<DataSubmitModel>();
                 DataProses = PoolDataProsesApprove(Fileproses.Id, Fileproses.stageTable);
