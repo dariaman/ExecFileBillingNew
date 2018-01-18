@@ -73,13 +73,14 @@ namespace ExecFileBilling
                             return;
                         }
                     }
-                    catch (Exception ex){
+                    catch (Exception ex)
+                    {
                         Console.WriteLine(ex.Message);
                         Console.WriteLine("Aplication exit...");
                         Thread.Sleep(5000);
                         return;
                     }
-                    
+
 
                     var IsData = CekFileInsert(idx, FileUpload.stageTable);
                     // Jika data sudah pernah diinsert atas file tersebut -> exit
@@ -374,7 +375,7 @@ namespace ExecFileBilling
                 con.Close();
             }
 
-            cmd = new MySqlCommand(@"SELECT * FROM " + tableName + " u WHERE u.`IsExec`=0 AND u.`IsSukses`=1 AND u.BillCode<>'B';", con)
+            cmd = new MySqlCommand(@"SELECT * FROM " + tableName + " u WHERE u.`IsExec`=0 AND u.`IsSukses`=1 AND u.BillCode<>'B' AND u.`BillingID` IS NOT NULL;", con)
             {
                 CommandType = CommandType.Text
             };
@@ -417,103 +418,7 @@ namespace ExecFileBilling
             Thread.Sleep(5000);
             return DataProses;
         }
-
-        public static List<DataSubmitModel> PoolDataProsesReject(int id, string tableName)
-        {
-            //IsSukses 0=Reject, 1=Approve
-            Console.Write("Pooling data Reject ... " + tableName + " ... ");
-            List<DataSubmitModel> DataProses = new List<DataSubmitModel>();
-            MySqlConnection con = new MySqlConnection(constring);
-            MySqlCommand cmd;
-            cmd = new MySqlCommand(@"SELECT u.* 
-                                    FROM `FileNextProcess` fp
-                                    INNER JOIN " + tableName + @" u ON u.`FileName`=fp.`FileName`
-                                    WHERE fp.`id`=@idx AND fp.`FileName` IS NOT NULL AND fp.`tglProses` IS NOT NULL
-                                    AND fp.`tglProses`=CURDATE() AND u.`IsExec`=0 AND u.`IsSukses`=0 AND u.BillCode='B';")
-            {
-                CommandType = CommandType.Text,
-                Connection = con
-            };
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.Int32) { Value = id });
-
-            try
-            {
-                con.Open();
-                using (MySqlDataReader rd = cmd.ExecuteReader())
-                {
-                    while (rd.Read())
-                    {
-                        DataProses.Add(new DataSubmitModel()
-                        {
-                            id = Convert.ToInt32(rd["id"]),
-                            PolisNo = rd["PolisNo"].ToString(),
-                            Amount = Convert.ToDecimal(rd["Amount"]),
-                            ApprovalCode = rd["ApprovalCode"].ToString(),
-                            Deskripsi = rd["Deskripsi"].ToString(),
-                            AccNo = rd["AccNo"].ToString(),
-                            AccName = rd["AccName"].ToString(),
-                            IsSukses = Convert.ToBoolean(rd["IsSukses"]),
-                            PolisId = rd["PolisId"].ToString(),
-                            BillCode = rd["BillCode"].ToString(),
-                        });
-                    }
-                }
-            }
-            catch (Exception ex) { throw new Exception("PoolDataProsesReject(B) : " + ex.Message); }
-            finally { con.Close(); }
-
-            cmd = new MySqlCommand(@"SELECT u.* 
-                                    FROM `FileNextProcess` fp
-                                    INNER JOIN " + tableName + @" u ON u.`FileName`=fp.`FileName`
-                                    WHERE fp.`id`=@idx AND fp.`FileName` IS NOT NULL AND fp.`tglProses` IS NOT NULL
-                                    AND fp.`tglProses`=CURDATE() AND u.`IsExec`=0 AND u.`IsSukses`=0 AND u.BillCode<>'B';")
-            {
-                CommandType = CommandType.Text,
-                Connection = con
-            };
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.Int32) { Value = id });
-            try
-            {
-                con.Open();
-                using (MySqlDataReader rd = cmd.ExecuteReader())
-                {
-                    while (rd.Read())
-                    {
-                        DataProses.Add(new DataSubmitModel()
-                        {
-                            id = Convert.ToInt32(rd["id"]),
-                            PolisNo = rd["PolisNo"].ToString(),
-                            Amount = Convert.ToDecimal(rd["Amount"]),
-                            ApprovalCode = rd["ApprovalCode"].ToString(),
-                            Deskripsi = rd["Deskripsi"].ToString(),
-                            AccNo = rd["AccNo"].ToString(),
-                            AccName = rd["AccName"].ToString(),
-                            IsSukses = Convert.ToBoolean(rd["IsSukses"]),
-                            BillingID = (rd["BillingID"].ToString() == string.Empty) ? null : rd["BillingID"].ToString(),
-                            BillCode = rd["BillCode"].ToString(),
-                        });
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("PoolDataProsesReject(X) : " + ex.Message);
-            }
-            finally
-            {
-                con.CloseAsync();
-            }
-
-            if (DataProses.Count < 1) Console.Write("=> Kosong");
-            else Console.Write(DataProses.Count.ToString());
-            Console.WriteLine();
-            Thread.Sleep(5000);
-
-            return DataProses;
-        }
-
+        
         public static void RemoveFile(FileResultModel Fileproses)
         {
             MySqlConnection con = new MySqlConnection(constring);
@@ -1347,8 +1252,6 @@ SELECT LAST_INSERT_ID();";
 SET @tgl:=NOW();
 SET @tglSaja:=DATE(@tgl);
 
-DELETE su FROM " + DataHeader.stageTable + @" su WHERE su.`IsSukses`=1 ;
-
 SET @prev_value := 0;SET @rank_count := 0;
 
 DROP TEMPORARY TABLE IF EXISTS billx;
@@ -1361,7 +1264,7 @@ FROM (
 	SELECT DISTINCT bx.policy_id,bx.BillingID
 	FROM `billing` bx
 	INNER JOIN " + DataHeader.stageTable + @" su ON su.`PolisId`=bx.policy_id
-	WHERE bx.status_billing IN ('A','C')
+	WHERE bx.status_billing IN ('A','C') AND su.`IsSukses`=0 AND su.IsExec=0
 )b;
 
 SET @prev_value := 0;SET @rank_count := 0;
@@ -1385,7 +1288,7 @@ LEFT JOIN `ReasonMapingGroup` rg ON rg.`ReajectReason`=COALESCE(up.`Deskripsi`,r
 	SET up.`BillingID`=bx.BillingID,
 	up.`Deskripsi`=COALESCE(rm.`reject_reason_bank`,up.`Deskripsi`,up.`ApprovalCode`),
 	up.`RejectGroupID`=rg.`GroupRejectMappingID`
-WHERE up.IsExec=0;
+WHERE up.IsExec=0 AND up.IsSukses=0;
 
 # Update data upload BillingOther dari hasil mapping
 UPDATE " + DataHeader.stageTable + @" up
@@ -1395,7 +1298,7 @@ LEFT JOIN `ReasonMapingGroup` rg ON rg.`ReajectReason`=COALESCE(up.`Deskripsi`,r
 	SET up.`BillingID`=up.`BillingID`,
 	up.`Deskripsi`=COALESCE(rm.`reject_reason_bank`,up.`Deskripsi`,up.`ApprovalCode`),
 	up.`RejectGroupID`=rg.`GroupRejectMappingID`
-WHERE up.IsExec=0;
+WHERE up.IsExec=0 AND up.IsSukses=0;
 
 # Update data upload Quote dari hasil mapping
 UPDATE " + DataHeader.stageTable + @" up
@@ -1405,7 +1308,7 @@ LEFT JOIN `ReasonMapingGroup` rg ON rg.`ReajectReason`=COALESCE(up.`Deskripsi`,r
 	SET up.`BillingID`=up.`BillingID`,
 	up.`Deskripsi`=COALESCE(rm.`reject_reason_bank`,up.`Deskripsi`,up.`ApprovalCode`),
 	up.`RejectGroupID`=rg.`GroupRejectMappingID`
-WHERE up.IsExec=0;
+WHERE up.IsExec=0 AND up.IsSukses=0;
 
 SELECT `AUTO_INCREMENT` INTO @tbid
 FROM  INFORMATION_SCHEMA.TABLES
@@ -1418,7 +1321,7 @@ u.`Deskripsi`,u.`RejectGroupID`,u.`AccNo`,u.`AccName`,@tgl
 FROM `FileNextProcess` fp
 INNER JOIN " + DataHeader.stageTable + @" u ON u.`FileName`=fp.`FileName`
 WHERE fp.`id`=@idx AND fp.`FileName` IS NOT NULL AND fp.`tglProses` IS NOT NULL
-AND u.`IsExec`=0 AND u.`IsSukses`=0 ;
+AND u.`IsExec`=0 AND u.`IsSukses`=0 AND u.`BillingID` IS NOT NULL;
 
 UPDATE `billing` b
 INNER JOIN transaction_bank tb ON tb.`BillingID`=b.BillingID
@@ -1434,14 +1337,14 @@ WHERE b.`status_billing` IN ('A','C')
 	
 UPDATE `billing_others` q
 INNER JOIN transaction_bank tb ON tb.`BillingID`=q.`BillingID`
-	SET q.`IsDownload`=0,q.`LastUploadDate`=@tgl,q.`PaymentTransactionID`=tb.`id`
+	SET q.`IsDownload`=0,q.`LastUploadDate`=@tgl,q.`PaymentTransactionID`=tb.`id`,q.`Source_download`='CC'
 WHERE q.`status_billing` IN ('A','C')
 	AND tb.`id` >= @tbid
 	AND tb.`DateInsert` >= @tgl;		
 		
 UPDATE `quote_billing` q
 INNER JOIN transaction_bank tb ON tb.`BillingID`=q.`quote_id`
-	SET q.`IsDownload`=0,q.`LastUploadDate`=@tgl,q.`PaymentTransactionID`=tb.`id`
+	SET q.`IsDownload`=0,q.`LastUploadDate`=@tgl,q.`PaymentTransactionID`=tb.`id`,q.`Source_download`='CC'
 WHERE q.`status` IN ('A','C')
 	AND tb.`id` >= @tbid
 	AND tb.`DateInsert` >= @tgl;"
@@ -1474,12 +1377,12 @@ WHERE q.`status` IN ('A','C')
                         //MapingData(item.Id, item.stageTable);
                         Thread.Sleep(5000);
                         DataProses = new List<DataSubmitModel>();
-                        DataProses = PoolDataProsesApprove(item.Id, item.stageTable);
+                        if (item.Id != 2) DataProses = PoolDataProsesApprove(item.Id, item.stageTable);
+
                         if (DataProses.Count > 0) SubmitApproveTransaction(item.stageTable, DataProses, item);
 
                         //Proses yang reject
-                        if (item.Id == 1) continue; // Pada Saat Proses BCA Approve, Proses reject di skip dan akan di proses pada id 2(Bca Rejct)
-                        SubmitRejectTransaction(item);
+                        if (item.Id > 1) SubmitRejectTransaction(item);
 
                         RemoveFile(item);
                         RemoveFileBilling(item);
@@ -1499,13 +1402,13 @@ WHERE q.`status` IN ('A','C')
                 var Fileproses = GenFile(id);
                 //MapingData(Fileproses.Id, Fileproses.stageTable);
                 if (Fileproses == null) return;
+
                 DataProses = new List<DataSubmitModel>();
-                DataProses = PoolDataProsesApprove(Fileproses.Id, Fileproses.stageTable);
-                SubmitApproveTransaction(Fileproses.stageTable, DataProses, Fileproses);
+                if (Fileproses.Id != 2) DataProses = PoolDataProsesApprove(Fileproses.Id, Fileproses.stageTable);
+                if (DataProses.Count > 0) SubmitApproveTransaction(Fileproses.stageTable, DataProses, Fileproses);
 
                 //Proses yang reject
-                if (id != 1)  // Pada Saat Proses BCA Approve, Proses reject di skip dan akan di proses pada id 2(Bca Rejct)
-                SubmitRejectTransaction(Fileproses);
+                if (id != 1) SubmitRejectTransaction(Fileproses);
 
                 RemoveFile(Fileproses);
                 RemoveFileBilling(Fileproses);
