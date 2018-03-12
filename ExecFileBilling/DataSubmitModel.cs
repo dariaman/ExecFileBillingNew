@@ -29,6 +29,8 @@ namespace ExecFileBilling
         public string TransHistory { get; set; }
         public string receiptID { get; set; }
         public string receiptOtherID { get; set; }
+        public string PolisNoteReceiptID { get; set; }
+        public string PolisNoteReceiptOtherID { get; set; }
         public string TransID { get; set; } // ID dari CC/AC Transaction di Life21
     }
 }
