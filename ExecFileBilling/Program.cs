@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -26,7 +27,7 @@ namespace ExecFileBilling
 
         static void Main(string[] args)
         {
-            //args = new string[] { "exec" };
+            //args = new string[] { "exec", "6" };
             //args = new string[] { "upload", "1" };
             if (args.Count() < 1)
             {
@@ -116,7 +117,7 @@ namespace ExecFileBilling
             else if (args[0] == "exec")
             {
                 if (args.Count() == 1) ExceuteDataUpload();
-                if (args.Count() > 1)
+                else if (args.Count() > 1)
                 {
                     if (!int.TryParse(args[1], out int idx))
                     {
@@ -418,7 +419,7 @@ namespace ExecFileBilling
             Thread.Sleep(5000);
             return DataProses;
         }
-        
+
         public static void RemoveFile(FileResultModel Fileproses)
         {
             MySqlConnection con = new MySqlConnection(constring);
@@ -837,7 +838,7 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
 
             try
             {
-                GetBillingUnpaid(ref billingID,ref CashlessFeeAmount, DataProses.PolisId);
+                GetBillingUnpaid(ref billingID, ref CashlessFeeAmount, DataProses.PolisId);
                 if (billingID == "") throw new Exception("Billing Kosong....");
 
                 con.Open();
@@ -883,11 +884,11 @@ SELECT LAST_INSERT_ID();";
                 DataProses.receiptID = cmd.ExecuteScalar().ToString();
 
                 // Insert Polis Note Receipt
-                string pesan= "RECEIPT INPUT RP (CC)";
+                string pesan = "RECEIPT INPUT RP (CC)";
                 cmd.CommandType = CommandType.Text;
                 cmd.Parameters.Clear();
                 cmd.CommandText = @"insert into `prod_life21`.policy_note(policy_id, date_tran, message, staff_id) 
-                                    SELECT @PolisId, @tgl,@pesan,1000;
+                                    SELECT @PolisId, @tgl,@pesan,2000;
                                     SELECT LAST_INSERT_ID();";
                 cmd.Parameters.Add(new MySqlParameter("@PolisId", MySqlDbType.Int32) { Value = DataProses.PolisId });
                 cmd.Parameters.Add(new MySqlParameter("@tgl", MySqlDbType.DateTime) { Value = DataHeader.tglSkrg });
@@ -919,12 +920,12 @@ SELECT LAST_INSERT_ID();";
                     cmd.CommandType = CommandType.Text;
                     cmd.Parameters.Clear();
                     cmd.CommandText = @"insert into `prod_life21`.policy_note(policy_id, date_tran, message, staff_id) 
-                                    SELECT @PolisId, @tgl,@pesan,1000;
+                                    SELECT @PolisId, @tgl,@pesan,2000;
                                     SELECT LAST_INSERT_ID();";
                     cmd.Parameters.Add(new MySqlParameter("@PolisId", MySqlDbType.Int32) { Value = DataProses.PolisId });
                     cmd.Parameters.Add(new MySqlParameter("@tgl", MySqlDbType.DateTime) { Value = DataHeader.tglSkrg });
                     cmd.Parameters.Add(new MySqlParameter("@pesan", MySqlDbType.VarChar) { Value = pesan.ToUpper() });
-                    DataProses.PolisNoteReceiptOtherID= cmd.ExecuteScalar().ToString();
+                    DataProses.PolisNoteReceiptOtherID = cmd.ExecuteScalar().ToString();
                 }
 
                 // Insert CC Transaction
@@ -1036,14 +1037,14 @@ SELECT LAST_INSERT_ID();";
 
         public static void BillOtherApprove(DataSubmitModel DataProses, FileResultModel DataHeader)
         {
-            string billingID = "",BilType="", polis_id = "";
+            string billingID = "", BilType = "", polis_id = "";
             MySqlConnection con = new MySqlConnection(constring);
             MySqlTransaction tr = null;
             MySqlCommand cmd = new MySqlCommand();
 
             try
             {
-                GetBillingOtherUnpaid(ref billingID,ref BilType,ref polis_id, DataProses.BillingID);
+                GetBillingOtherUnpaid(ref billingID, ref BilType, ref polis_id, DataProses.BillingID);
                 if (billingID == "") throw new Exception("Billing Other sudah Paid");
                 DataProses.PolisId = polis_id;
 
@@ -1062,9 +1063,11 @@ SELECT LAST_INSERT_ID();";
                 cmd.Parameters.Add(new MySqlParameter("@PolisId", MySqlDbType.Int32) { Value = DataProses.PolisId });
                 cmd.Parameters.Add(new MySqlParameter("@tgl", MySqlDbType.DateTime) { Value = DataHeader.tglSkrg });
                 if (BilType == "A2")
-                    cmd.Parameters.Add(new MySqlParameter("@pesan", MySqlDbType.VarChar) { Value =string.Concat(pesan, "Endorsemen Cetak Polis Fisik").ToUpper() });
+                    cmd.Parameters.Add(new MySqlParameter("@pesan", MySqlDbType.VarChar) { Value = string.Concat(pesan, "Endorsemen Cetak Polis Fisik").ToUpper() });
                 else if (BilType == "A3")
                     cmd.Parameters.Add(new MySqlParameter("@pesan", MySqlDbType.VarChar) { Value = string.Concat(pesan, "Cetak KARTU").ToUpper() });
+                else if (BilType == "A1")
+                    cmd.Parameters.Add(new MySqlParameter("@pesan", MySqlDbType.VarChar) { Value = string.Concat(pesan, "cashlessfee").ToUpper() });
                 DataProses.PolisNoteReceiptOtherID = cmd.ExecuteScalar().ToString();
 
                 //Create History Transaction
@@ -1467,7 +1470,7 @@ WHERE q.`status` IN ('A','C')
             }
         }
 
-        public static void GetBillingUnpaid(ref string BillingID,ref decimal cashlessFee, string PolisID)
+        public static void GetBillingUnpaid(ref string BillingID, ref decimal cashlessFee, string PolisID)
         {
             GetLastBillingUnpaid(ref BillingID, ref cashlessFee, PolisID);
 
@@ -1556,7 +1559,7 @@ WHERE q.`status` IN ('A','C')
             finally { con.CloseAsync(); }
         }
 
-        public static void GetBillingOtherUnpaid(ref string BillingID,ref string BillingType,ref string Polis_id, string BillOthersID)
+        public static void GetBillingOtherUnpaid(ref string BillingID, ref string BillingType, ref string Polis_id, string BillOthersID)
         {
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd = new MySqlCommand(@"SELECT b.`BillingID`,b.`BillingType`,b.`policy_id` FROM `billing_others` b
@@ -1595,6 +1598,6 @@ WHERE q.`status` IN ('A','C')
             }
             catch (Exception ex) { throw new Exception("GetQuoteUnpaid() : " + ex.Message); }
             finally { con.CloseAsync(); }
-        }
+        }        
     }
 }
