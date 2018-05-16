@@ -10,7 +10,7 @@ namespace ExecFileBilling
     {
         public string PolisNo { get; set; }
 
-        //public DateTime TglPaid { get; set; }
+        public DateTime? TglPaid { get; set; }
         public Decimal Amount { get; set; }
         public string ApprovalCode { get; set; }
         public string Deskripsi { get; set; }

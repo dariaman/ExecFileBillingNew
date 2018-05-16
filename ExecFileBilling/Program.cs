@@ -28,7 +28,8 @@ namespace ExecFileBilling
         static void Main(string[] args)
         {
             //args = new string[] { "exec", "6" };
-            //args = new string[] { "upload", "1" };
+            args = new string[] { "upload", "1" };
+
             if (args.Count() < 1)
             {
                 Console.WriteLine("Parameter tidak terdefenisi...");
@@ -66,6 +67,7 @@ namespace ExecFileBilling
                     }
                     try
                     {
+                        //jika file tidak bisa dibaca
                         if (!File.OpenRead(FileResult + FileUpload.FileName).CanRead)
                         {
                             Console.WriteLine("File tidak bisa di proses");
@@ -82,8 +84,6 @@ namespace ExecFileBilling
                         return;
                     }
 
-
-                    var IsData = CekFileInsert(idx, FileUpload.stageTable);
                     // Jika data sudah pernah diinsert atas file tersebut -> exit
                     if (CekFileInsert(idx, FileUpload.stageTable))
                     {
@@ -97,21 +97,38 @@ namespace ExecFileBilling
                     List<DataUploadModel> DataUpload = new List<DataUploadModel>();
                     if (idx == 1)
                     {
-                        // kosongkan table jika file bca yang satunya belum diupload (BCA Reject)
+                        /*
+                         * jika yg di upload bca approve, cek apakah bca reject sudah di upload ?
+                         * jika bca reject belum di upload maka langsung delete data tabel staging
+                         */
                         if (!CekFileInsert(2, FileUpload.stageTable)) KosongkanTabel(FileUpload.stageTable);
-                        DataUpload = BacaFileBCA(FileUpload.FileName);
+                        // rekam file upload
+                        DataUpload = BacaFileBCA_CC(FileUpload.FileName);
                     }
                     else if (idx == 2)
                     {
+                        /*
+                         * jika yg di upload bca reject, cek apakah bca approve sudah di upload ?
+                         * jika bca approve belum di upload maka langsung delete data tabel staging
+                         */
                         if (!CekFileInsert(1, FileUpload.stageTable)) KosongkanTabel(FileUpload.stageTable);
-                        DataUpload = BacaFileBCA(FileUpload.FileName);
+                        //rekam  file upload
+                        DataUpload = BacaFileBCA_CC(FileUpload.FileName);
                     }
-                    else if (idx == 3) DataUpload = BacaFileMandiri(FileUpload.FileName);
-                    else if (idx == 4 || idx == 5) DataUpload = BacaFileMega(FileUpload.FileName);
-                    else if (idx == 6) DataUpload = BacaFileBNI(FileUpload.FileName);
+                    else if (idx == 3) DataUpload = BacaFileMandiri_CC(FileUpload.FileName); //mandiri cc
+                    else if (idx == 4 || idx == 5) DataUpload = BacaFileMega_CC(FileUpload.FileName); //mega cc
+                    else if (idx == 6) DataUpload = BacaFileBNI_CC(FileUpload.FileName);  // BNI cc
+
+                    //else if (idx == 7 || idx == 8) DataUpload = BacaFileBNI(FileUpload.FileName); // cimb cc
+                    ////else if (idx == 8) DataUpload = BacaFileBNI(FileUpload.FileName); //
+                    else if (idx == 9) DataUpload = BacaFileBCA_AC(FileUpload.FileName); // bca ac
+                    else if (idx == 10) DataUpload = BacaFileMandiri_AC(FileUpload.FileName); // mandiri ac
+                    //else if (idx == 11) DataUpload = BacaFileBNI(FileUpload.FileName); // va daily
+                    //else if (idx == 12) DataUpload = BacaFileBNI(FileUpload.FileName); // va realtime
 
                     InsertTableStaging(DataUpload, FileUpload.stageTable, FileUpload.FileName);
                     MapingData(idx, FileUpload.stageTable);
+
                 }
             }
             else if (args[0] == "exec")
@@ -183,9 +200,11 @@ namespace ExecFileBilling
             FileResultModel Fileproses = new FileResultModel();
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
-            cmd = new MySqlCommand(@"SELECT * FROM `FileNextProcess`
-                                    WHERE `FileName` IS NOT NULL AND `tglProses` IS NOT NULL
-                                    AND id=@idx;", con)
+            cmd = new MySqlCommand(@"SELECT fp.* ,bs.`file_download`
+                                    FROM `FileNextProcess` fp
+                                    LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
+                                    WHERE fp.`FileName` IS NOT NULL AND fp.`tglProses` IS NOT NULL
+                                    AND fp.id=@idx;", con)
             {
                 CommandType = CommandType.Text
             };
@@ -204,7 +223,7 @@ namespace ExecFileBilling
                             trancode = rd["trancode"].ToString(),
                             FileName = rd["FileName"].ToString(),
                             stageTable = rd["stageTable"].ToString(),
-                            FileBilling = rd["FileBilling"].ToString(),
+                            FileBilling = rd["file_download"].ToString(),
                             tglProses = Convert.ToDateTime(rd["tglProses"]),
                             source = rd["source"].ToString(),
                             bankid_receipt = Convert.ToInt32(rd["bankid_receipt"]),
@@ -552,7 +571,7 @@ namespace ExecFileBilling
             }
         }
 
-        public static List<DataUploadModel> BacaFileBCA(string Fileproses)
+        public static List<DataUploadModel> BacaFileBCA_CC(string Fileproses)
         {
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
             using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
@@ -581,7 +600,7 @@ namespace ExecFileBilling
             return dataUpload;
         }
 
-        public static List<DataUploadModel> BacaFileMandiri(string Fileproses)
+        public static List<DataUploadModel> BacaFileMandiri_CC(string Fileproses)
         {
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
 
@@ -642,7 +661,7 @@ namespace ExecFileBilling
             return dataUpload;
         }
 
-        public static List<DataUploadModel> BacaFileMega(string Fileproses)
+        public static List<DataUploadModel> BacaFileMega_CC(string Fileproses)
         {
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
 
@@ -704,7 +723,7 @@ namespace ExecFileBilling
             return dataUpload;
         }
 
-        public static List<DataUploadModel> BacaFileBNI(string Fileproses)
+        public static List<DataUploadModel> BacaFileBNI_CC(string Fileproses)
         {
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
 
@@ -744,7 +763,142 @@ namespace ExecFileBilling
             return dataUpload;
         }
 
+        public static List<DataUploadModel> BacaFileBCA_AC(string Fileproses)
+        {
+            List<DataUploadModel> dataUpload = new List<DataUploadModel>();
+            using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var panjang = line.Length;
+                    if (panjang < 205) continue;
+
+                    if (!Decimal.TryParse(line.Substring(74, 18).Trim(), out decimal tmp1)) continue;
+                    dataUpload.Add(new DataUploadModel()
+                    {
+                        PolisNo = line.Substring(92, 15).Trim(),
+                        AccNo = line.Substring(37, 11).Trim(),
+                        AccName = line.Substring(48, 26).Trim(),
+                        Amount = tmp1,
+                        ApprovalCode = line.Substring(129, 9).Trim(),
+                        Deskripsi = line.Substring(138, 51).Trim(),
+                        IsSukses = (line.Substring(129, 9).Trim().ToLower() == "berhasil") ? true : false
+                    });
+                }
+            }
+            return dataUpload;
+        }
+
+        public static List<DataUploadModel> BacaFileMandiri_AC(string Fileproses)
+        {
+            List<DataUploadModel> dataUpload = new List<DataUploadModel>();
+            using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
+            {
+                string line;
+                Boolean status;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var panjang = line.Length;
+                    if (panjang < 720) continue;
+
+                    if (!Decimal.TryParse(line.Substring(634, 40).Trim(), out decimal tmp1)) continue;
+                    status = (line.Substring(674, 46).Trim().ToLower() == "berhasil") ? true : false;
+                    var acc = line.Substring(306, 244).Trim().Split('/');
+                    dataUpload.Add(new DataUploadModel()
+                    {
+                        PolisNo = line.Substring(590, 40).Trim(),
+                        AccNo = (acc.Length == 2) ? acc[0].Trim()  : null,
+                        AccName = (acc.Length == 2) ? acc[1].Replace("(IDR)", string.Empty).Trim() : null,
+                        Amount = tmp1,
+                        ApprovalCode = line.Substring(674, 46).Trim(),
+                        Deskripsi = status ? line.Substring(720, panjang - 720).Trim() : null,
+                        IsSukses = status
+                    });
+                }
+            }
+            return dataUpload;
+        }
+
+        public static List<DataUploadModel> BacaFileVA_daily(string Fileproses)
+        {
+            List<DataUploadModel> dataUpload = new List<DataUploadModel>();
+            using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var panjang = line.Length;
+                    if (panjang < 133) continue;
+
+                    if (!int.TryParse(line.Substring(1, 5).Trim(), out int i)) continue; // cek no urut
+                    if (!Decimal.TryParse(line.Substring(52, 19).Trim(), out decimal tmp1)) continue; // cek amount
+                    if (!DateTime.TryParseExact(line.Substring(73, 18).Trim(), "dd/MM/yy  HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime tgl_Paid)) continue;
+                    dataUpload.Add(new DataUploadModel()
+                    {
+                        PolisNo = line.Substring(8, 20).Trim(),
+                        AccName = line.Substring(28, 18).Trim(),
+                        Amount = tmp1,
+                        Deskripsi = line.Substring(100, 33).Trim(),
+                        TglPaid= tgl_Paid,
+                        IsSukses = true 
+                    });
+                }
+            }
+            return dataUpload;
+        }
+
+        public static List<DataUploadModel> BacaFileVA_realtime(string Fileproses)
+        {
+            List<DataUploadModel> dataUpload = new List<DataUploadModel>();
+            using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var panjang = line.Length;
+                    if (panjang < 195) continue;
+
+                    if (!int.TryParse(line.Substring(0, 5).Trim(), out int i)) continue; // cek no urut
+                    if (!Decimal.TryParse(line.Substring(112, 22).Trim(), out decimal tmp1)) continue; // cek amount
+                    if (!DateTime.TryParseExact(line.Substring(136, 19).Trim(), "dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime tgl_Paid)) continue;
+                    dataUpload.Add(new DataUploadModel()
+                    {
+                        PolisNo = line.Substring(11, 19).Trim(),
+                        AccName = line.Substring(45, 31).Trim(),
+                        Amount = tmp1,
+                        Deskripsi = line.Substring(158, 37).Trim(),
+                        TglPaid = tgl_Paid,
+                        IsSukses = true
+                    });
+                }
+            }
+            return dataUpload;
+        }
+
         public static void KosongkanTabel(string TableName)
+        {
+            MySqlConnection con = new MySqlConnection(constring);
+            MySqlCommand cmd;
+            cmd = new MySqlCommand(@"DELETE FROM " + TableName + ";", con);
+            cmd.Parameters.Clear();
+            cmd.CommandType = CommandType.Text;
+            try
+            {
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("KosongkanTabel() : " + ex.Message);
+            }
+            finally
+            {
+                con.Close();
+            }
+        }
+
+        public static void KosongkanSetengahTabelBCA(int idx, string TableName)
         {
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
@@ -1598,6 +1752,6 @@ WHERE q.`status` IN ('A','C')
             }
             catch (Exception ex) { throw new Exception("GetQuoteUnpaid() : " + ex.Message); }
             finally { con.CloseAsync(); }
-        }        
+        }
     }
 }
