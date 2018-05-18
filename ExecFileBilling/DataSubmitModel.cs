@@ -9,6 +9,7 @@ namespace ExecFileBilling
     class DataSubmitModel
     {
         public int id { get; set; }
+        public int freq_payment { get; set; }
         public string PolisNo { get; set; }
         public Decimal Amount { get; set; }
         public string ApprovalCode { get; set; }
@@ -26,6 +27,7 @@ namespace ExecFileBilling
         //public Decimal? TotalAmount { get; set; }
 
         // Data virtual
+        public string GroupRejectMapping { get; set; }
         public string TransHistory { get; set; }
         public string receiptID { get; set; }
         public string receiptOtherID { get; set; }

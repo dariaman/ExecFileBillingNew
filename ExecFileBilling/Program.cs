@@ -27,8 +27,8 @@ namespace ExecFileBilling
 
         static void Main(string[] args)
         {
-            //args = new string[] { "exec", "6" };
-            args = new string[] { "upload", "1" };
+            args = new string[] { "exec", "3" };
+            //args = new string[] { "upload", "3" };
 
             if (args.Count() < 1)
             {
@@ -102,6 +102,7 @@ namespace ExecFileBilling
                          * jika bca reject belum di upload maka langsung delete data tabel staging
                          */
                         if (!CekFileInsert(2, FileUpload.stageTable)) KosongkanTabel(FileUpload.stageTable);
+                        else KosongkanSetengahTabelBCA(idx,FileUpload.stageTable);
                         // rekam file upload
                         DataUpload = BacaFileBCA_CC(FileUpload.FileName);
                     }
@@ -112,6 +113,7 @@ namespace ExecFileBilling
                          * jika bca approve belum di upload maka langsung delete data tabel staging
                          */
                         if (!CekFileInsert(1, FileUpload.stageTable)) KosongkanTabel(FileUpload.stageTable);
+                        else KosongkanSetengahTabelBCA(idx, FileUpload.stageTable);
                         //rekam  file upload
                         DataUpload = BacaFileBCA_CC(FileUpload.FileName);
                     }
@@ -251,9 +253,12 @@ namespace ExecFileBilling
             List<FileResultModel> Fileproses = new List<FileResultModel>();
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
-            cmd = new MySqlCommand(@"SELECT * FROM `FileNextProcess`
-                                    WHERE `FileName` IS NOT NULL AND `tglProses` IS NOT NULL
-                                    AND `tglProses` = CURDATE();", con)
+            cmd = new MySqlCommand(@"SELECT fp.* ,bs.`file_download`
+                                    FROM `FileNextProcess` fp
+                                    LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
+                                    WHERE fp.`FileName` IS NOT NULL 
+                                    AND fp.`tglProses` IS NOT NULL
+                                    AND fp.`tglProses` = CURDATE(); ", con)
             {
                 CommandType = CommandType.Text
             };
@@ -270,7 +275,7 @@ namespace ExecFileBilling
                             trancode = rd["trancode"].ToString(),
                             FileName = rd["FileName"].ToString(),
                             stageTable = rd["stageTable"].ToString(),
-                            FileBilling = rd["FileBilling"].ToString(),
+                            FileBilling = rd["file_download"].ToString(),
                             tglProses = Convert.ToDateTime(rd["tglProses"]),
                             source = rd["source"].ToString(),
                             bankid_receipt = Convert.ToInt32(rd["bankid_receipt"]),
@@ -296,12 +301,15 @@ namespace ExecFileBilling
 
         public static FileResultModel GenFile(int id)
         {
-            FileResultModel Fileproses = new FileResultModel();
+            FileResultModel Fileproses = null;
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
-            cmd = new MySqlCommand(@"SELECT * FROM `FileNextProcess`
-                                    WHERE `FileName` IS NOT NULL AND `tglProses` IS NOT NULL
-                                    AND `tglProses` = CURDATE() AND id=@idx;", con)
+            cmd = new MySqlCommand(@"SELECT fp.* ,bs.`file_download`
+                                    FROM `FileNextProcess` fp
+                                    LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
+                                    WHERE fp.`FileName` IS NOT NULL 
+                                    AND fp.`tglProses` IS NOT NULL
+                                    AND fp.`tglProses` = CURDATE() AND fp.id=@idx;", con)
             {
                 CommandType = CommandType.Text
             };
@@ -319,7 +327,7 @@ namespace ExecFileBilling
                             trancode = rd["trancode"].ToString(),
                             FileName = rd["FileName"].ToString(),
                             stageTable = rd["stageTable"].ToString(),
-                            FileBilling = rd["FileBilling"].ToString(),
+                            FileBilling = rd["file_download"].ToString(),
                             tglProses = Convert.ToDateTime(rd["tglProses"]),
                             source = rd["source"].ToString(),
                             bankid_receipt = Convert.ToInt32(rd["bankid_receipt"]),
@@ -375,8 +383,9 @@ namespace ExecFileBilling
                             AccName = rd["AccName"].ToString(),
                             IsSukses = Convert.ToBoolean(rd["IsSukses"]),
                             PolisId = rd["PolisId"].ToString(),
-                            //BillingID = (rd["BillingID"].ToString() == string.Empty) ? null : rd["BillingID"].ToString(),
                             BillCode = rd["BillCode"].ToString(),
+                            //GroupRejectMapping = rd["RejectGroupID"].ToString(),
+                            //BillingID = (rd["BillingID"].ToString() == string.Empty) ? null : rd["BillingID"].ToString(),
                             //BillStatus = rd["BillStatus"].ToString(),
                             //PolisStatus = rd["PolisStatus"].ToString(),
                             //PremiAmount = Convert.ToDecimal(rd["PremiAmount"]),
@@ -439,7 +448,7 @@ namespace ExecFileBilling
             return DataProses;
         }
 
-        public static void RemoveFile(FileResultModel Fileproses)
+        public static void RemoveFileUploadResult(FileResultModel Fileproses)
         {
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
@@ -491,6 +500,7 @@ namespace ExecFileBilling
                     Connection = con
 
                 };
+                cmd.Parameters.Clear();
                 cmd.Parameters.Add(new MySqlParameter("@idd", MySqlDbType.Int32) { Value = Fileproses.id_billing_download });
 
                 cmd.Connection.Open();
@@ -500,20 +510,19 @@ namespace ExecFileBilling
                 if (!Decimal.TryParse(data.ToString(), out decimal itemData)) return;
                 if (itemData > 0) return;
 
-                cmd = new MySqlCommand(@"UPDATE `FileNextProcess` SET `FileBilling`=NULL WHERE `id`=@id;")
+                cmd = new MySqlCommand(@"UPDATE `billing_download_summary` bd SET bd.`file_download`=NULL WHERE bd.`id`=@id;")
                 {
                     CommandType = CommandType.Text,
                     Connection = con
                 };
-                cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.Int32) { Value = Fileproses.Id });
+                cmd.Parameters.Clear();
+                cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.Int32) { Value = Fileproses.id_billing_download });
+                cmd.Connection.Open();
+                cmd.ExecuteNonQuery();
 
                 FileInfo Filex = new FileInfo(FileBilling.Trim() + Fileproses.FileBilling.Trim());
-                if (Filex.Exists)
-                {
-                    Filex.MoveTo(BillingBackup.Trim() + Fileproses.FileBilling.Trim() + Regex.Replace(Guid.NewGuid().ToString(), "[^0-9a-zA-Z]", "").Substring(0, 8));
-                    cmd.Connection.Open();
-                    cmd.ExecuteNonQuery();
-                }
+                if (Filex.Exists) Filex.MoveTo(BillingBackup.Trim() + Fileproses.FileBilling.Trim() + Regex.Replace(Guid.NewGuid().ToString(), "[^0-9a-zA-Z]", "").Substring(0, 8));
+                    
             }
             catch (Exception ex) { throw new Exception("RemoveFileBilling() : " + ex.Message); }
             finally
@@ -808,7 +817,7 @@ namespace ExecFileBilling
                     dataUpload.Add(new DataUploadModel()
                     {
                         PolisNo = line.Substring(590, 40).Trim(),
-                        AccNo = (acc.Length == 2) ? acc[0].Trim()  : null,
+                        AccNo = (acc.Length == 2) ? acc[0].Trim() : null,
                         AccName = (acc.Length == 2) ? acc[1].Replace("(IDR)", string.Empty).Trim() : null,
                         Amount = tmp1,
                         ApprovalCode = line.Substring(674, 46).Trim(),
@@ -840,8 +849,8 @@ namespace ExecFileBilling
                         AccName = line.Substring(28, 18).Trim(),
                         Amount = tmp1,
                         Deskripsi = line.Substring(100, 33).Trim(),
-                        TglPaid= tgl_Paid,
-                        IsSukses = true 
+                        TglPaid = tgl_Paid,
+                        IsSukses = true
                     });
                 }
             }
@@ -880,7 +889,7 @@ namespace ExecFileBilling
         {
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
-            cmd = new MySqlCommand(@"DELETE FROM " + TableName + ";", con);
+            cmd = new MySqlCommand(@"DELETE FROM " + TableName + ";ALTER TABLE " + TableName + " AUTO_INCREMENT=1;", con);
             cmd.Parameters.Clear();
             cmd.CommandType = CommandType.Text;
             try
@@ -900,10 +909,12 @@ namespace ExecFileBilling
 
         public static void KosongkanSetengahTabelBCA(int idx, string TableName)
         {
+            // hanya untuk file upload bca, karena bca filenya ada 2
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
-            cmd = new MySqlCommand(@"DELETE FROM " + TableName + ";", con);
+            cmd = new MySqlCommand(@"DELETE up FROM " + TableName + " up WHERE up.`IsSukses`=@id ;", con);
             cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.VarChar) { Value = (idx == 1 ? idx : 0) });
             cmd.CommandType = CommandType.Text;
             try
             {
@@ -929,17 +940,20 @@ namespace ExecFileBilling
             cmd = new MySqlCommand(@"
 UPDATE " + tableName + @" up
 INNER JOIN `policy_billing` pb ON pb.`policy_no`=up.`PolisNo`
-	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B'
+LEFT JOIN `ReasonMapingGroup` rp ON rp.`ReajectReason`=up.`Deskripsi` AND up.`IsSukses`=0
+	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) NOT IN ('A','X');
 
 UPDATE " + tableName + @" up
 INNER JOIN `billing_others` bo ON bo.`BillingID`=up.`PolisNo`
-	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A'
+LEFT JOIN `ReasonMapingGroup` rp ON rp.`ReajectReason`=up.`Deskripsi` AND up.`IsSukses`=0
+	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A',up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='A';
 
 UPDATE " + tableName + @" up
-LEFT JOIN `quote_billing` q ON q.`quote_id`=SUBSTRING_INDEX(up.`PolisNo`,'X',-1)
-	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q'
+INNER JOIN `quote_billing` q ON q.`quote_id`=SUBSTRING_INDEX(up.`PolisNo`,'X',-1)
+LEFT JOIN `ReasonMapingGroup` rp ON rp.`ReajectReason`=up.`Deskripsi` AND up.`IsSukses`=0
+	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q',up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
                 ", con);
             cmd.Parameters.Clear();
@@ -989,10 +1003,11 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
 
             string billingID = "";
             decimal CashlessFeeAmount = 0;
+            int freq_payment = 1;
 
             try
             {
-                GetBillingUnpaid(ref billingID, ref CashlessFeeAmount, DataProses.PolisId);
+                GetBillingUnpaid(ref billingID,ref freq_payment, ref CashlessFeeAmount, DataProses.PolisId);
                 if (billingID == "") throw new Exception("Billing Kosong....");
 
                 con.Open();
@@ -1023,8 +1038,8 @@ SELECT LAST_INSERT_ID();";
                 cmd.Parameters.Clear();
                 cmd.CommandText = @"
 INSERT INTO `prod_life21`.`receipt`(`receipt_date`,`receipt_policy_id`, `receipt_fund_type_id`, `receipt_transaction_code`, `receipt_amount`,
-`receipt_source`, `receipt_status`, `receipt_payment_date_time`, `receipt_seq`, `bank_acc_id`, `due_date_pre`,`acquirer_bank_id`)
-SELECT @tgl,up.`PolisId`,0,'RP',up.`Amount`-b.`cashless_fee_amount`,@source,'P',@tgl,b.`recurring_seq`,@bankAccId,b.`due_dt_pre`,@bankid
+`receipt_source`, `receipt_status`, `receipt_payment_date_time`, `receipt_seq`, `bank_acc_id`, `due_date_pre`,`acquirer_bank_id`,`freq_payment`,`created_by`)
+SELECT @tgl,up.`PolisId`,0,'RP',up.`Amount`-b.`cashless_fee_amount`,@source,'P',@tgl,b.`recurring_seq`,@bankAccId,b.`due_dt_pre`,@bankid,@freq,2000
 FROM " + DataHeader.stageTable + @" up
 LEFT JOIN `billing` b ON b.`BillingID`=@Billid
 WHERE up.`id`=@Id;
@@ -1035,6 +1050,7 @@ SELECT LAST_INSERT_ID();";
                 cmd.Parameters.Add(new MySqlParameter("@source", MySqlDbType.VarChar) { Value = DataHeader.source });
                 cmd.Parameters.Add(new MySqlParameter("@bankAccId", MySqlDbType.Int32) { Value = DataHeader.bankid_receipt });
                 cmd.Parameters.Add(new MySqlParameter("@bankid", MySqlDbType.Int32) { Value = DataHeader.bankid });
+                cmd.Parameters.Add(new MySqlParameter("@freq", MySqlDbType.Int32) { Value = freq_payment });
                 DataProses.receiptID = cmd.ExecuteScalar().ToString();
 
                 // Insert Polis Note Receipt
@@ -1055,8 +1071,8 @@ SELECT LAST_INSERT_ID();";
                     cmd.CommandType = CommandType.Text;
                     cmd.Parameters.Clear();
                     cmd.CommandText = @"
-INSERT INTO `prod_life21`.`receipt_other`(`receipt_date`,`policy_id`,`receipt_type_id`,`receipt_amount`,`receipt_source`,`receipt_payment_date`,`receipt_seq`,`bank_acc_id`,`acquirer_bank_id`)
-SELECT @tgl,b.`policy_id`,3,b.`cashless_fee_amount`,@source,@tgl,b.`recurring_seq`,@bankAccId,@bankid
+INSERT INTO `prod_life21`.`receipt_other`(`receipt_date`,`policy_id`,`receipt_type_id`,`receipt_amount`,`receipt_source`,`receipt_payment_date`,`receipt_seq`,`bank_acc_id`,`acquirer_bank_id`,`receipt_id`,`created_by`)
+SELECT @tgl,b.`policy_id`,3,b.`cashless_fee_amount`,@source,@tgl,b.`recurring_seq`,@bankAccId,@bankid,@receipt_id,2000
 FROM " + DataHeader.stageTable + @" up
 INNER JOIN `billing` b ON b.`BillingID`=@Billid
 WHERE up.`id`=@Id;
@@ -1067,6 +1083,7 @@ SELECT LAST_INSERT_ID();";
                     cmd.Parameters.Add(new MySqlParameter("@source", MySqlDbType.VarChar) { Value = DataHeader.source });
                     cmd.Parameters.Add(new MySqlParameter("@bankAccId", MySqlDbType.Int32) { Value = DataHeader.bankid_receipt });
                     cmd.Parameters.Add(new MySqlParameter("@bankid", MySqlDbType.Int32) { Value = DataHeader.bankid });
+                    cmd.Parameters.Add(new MySqlParameter("@receipt_id", MySqlDbType.Int32) { Value = DataProses.receiptID });
                     DataProses.receiptOtherID = cmd.ExecuteScalar().ToString();
 
                     // Insert Polis Note Receipt Other
@@ -1587,7 +1604,7 @@ WHERE q.`status` IN ('A','C')
                         //Proses yang reject
                         if (item.Id > 1) SubmitRejectTransaction(item);
 
-                        RemoveFile(item);
+                        RemoveFileUploadResult(item);
                         RemoveFileBilling(item);
                     }
                     stop = false;
@@ -1613,7 +1630,7 @@ WHERE q.`status` IN ('A','C')
                 //Proses yang reject
                 if (id != 1) SubmitRejectTransaction(Fileproses);
 
-                RemoveFile(Fileproses);
+                RemoveFileUploadResult(Fileproses);
                 RemoveFileBilling(Fileproses);
 
             }
@@ -1624,9 +1641,9 @@ WHERE q.`status` IN ('A','C')
             }
         }
 
-        public static void GetBillingUnpaid(ref string BillingID, ref decimal cashlessFee, string PolisID)
+        public static void GetBillingUnpaid(ref string BillingID,ref int freq_pay, ref decimal cashlessFee, string PolisID)
         {
-            GetLastBillingUnpaid(ref BillingID, ref cashlessFee, PolisID);
+            GetLastBillingUnpaid(ref BillingID,ref freq_pay, ref cashlessFee, PolisID);
 
             //// Create Billing jika billing tidak ada pada saat mapping (karena Approve)
             if (BillingID == "")
@@ -1647,16 +1664,16 @@ WHERE q.`status` IN ('A','C')
                 catch (Exception ex) { throw new Exception("GetBillingUnpaid() : " + ex.Message); }
                 finally { con.CloseAsync(); }
 
-                GetLastBillingUnpaid(ref BillingID, ref cashlessFee, PolisID); // pengecekan kedua setelah create billing
+                GetLastBillingUnpaid(ref BillingID,ref freq_pay, ref cashlessFee, PolisID); // pengecekan kedua setelah create billing
             }
 
             if (BillingID == "") throw new Exception("Billing Konsong setelah CreateBilling, untuk PolisID '" + PolisID + "'");
         }
 
-        public static void GetLastBillingUnpaid(ref string BillingID, ref decimal cashlessFee, string PolisID)
+        public static void GetLastBillingUnpaid(ref string BillingID, ref int freq_pay, ref decimal cashlessFee, string PolisID)
         {
             MySqlConnection con = new MySqlConnection(constring);
-            MySqlCommand cmd = new MySqlCommand(@"SELECT b.`BillingID`,b.`policy_id`,b.`cashless_fee_amount`
+            MySqlCommand cmd = new MySqlCommand(@"SELECT b.`BillingID`,b.`policy_id`,b.`cashless_fee_amount`,b.`freq_payment`
                             FROM `policy_billing` pb
                             INNER JOIN `billing` b ON pb.`policy_Id`=b.`policy_id`
                             WHERE pb.`policy_id`=@PolisID AND b.`status_billing` IN ('A','C')
@@ -1678,6 +1695,7 @@ WHERE q.`status` IN ('A','C')
                     {
                         BillingID = rd["BillingID"].ToString();
                         decimal.TryParse(rd["cashless_fee_amount"].ToString(), out cashlessFee);
+                        int.TryParse(rd["freq_payment"].ToString(), out freq_pay);
                     }
 
                 }
