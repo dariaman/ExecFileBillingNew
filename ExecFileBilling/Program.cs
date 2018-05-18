@@ -27,8 +27,8 @@ namespace ExecFileBilling
 
         static void Main(string[] args)
         {
-            args = new string[] { "exec", "3" };
-            //args = new string[] { "upload", "3" };
+            //args = new string[] { "exec", "3" };
+            args = new string[] { "upload", "12" };
 
             if (args.Count() < 1)
             {
@@ -102,7 +102,7 @@ namespace ExecFileBilling
                          * jika bca reject belum di upload maka langsung delete data tabel staging
                          */
                         if (!CekFileInsert(2, FileUpload.stageTable)) KosongkanTabel(FileUpload.stageTable);
-                        else KosongkanSetengahTabelBCA(idx,FileUpload.stageTable);
+                        else KosongkanSetengahTabelBCA(idx, FileUpload.stageTable);
                         // rekam file upload
                         DataUpload = BacaFileBCA_CC(FileUpload.FileName);
                     }
@@ -125,12 +125,14 @@ namespace ExecFileBilling
                     ////else if (idx == 8) DataUpload = BacaFileBNI(FileUpload.FileName); //
                     else if (idx == 9) DataUpload = BacaFileBCA_AC(FileUpload.FileName); // bca ac
                     else if (idx == 10) DataUpload = BacaFileMandiri_AC(FileUpload.FileName); // mandiri ac
-                    //else if (idx == 11) DataUpload = BacaFileBNI(FileUpload.FileName); // va daily
-                    //else if (idx == 12) DataUpload = BacaFileBNI(FileUpload.FileName); // va realtime
+                    else if (idx == 11) DataUpload = BacaFileVA_daily(FileUpload.FileName); // va daily
+                    else if (idx == 12) DataUpload = BacaFileVA_realtime(FileUpload.FileName); // va realtime
 
                     InsertTableStaging(DataUpload, FileUpload.stageTable, FileUpload.FileName);
                     MapingData(idx, FileUpload.stageTable);
 
+                    // check billing berdasarkan paid_date untuk va
+                    if (idx == 11 || idx == 12)  UpdateBilling_VA_Paid(idx, FileUpload.stageTable);
                 }
             }
             else if (args[0] == "exec")
@@ -522,7 +524,7 @@ namespace ExecFileBilling
 
                 FileInfo Filex = new FileInfo(FileBilling.Trim() + Fileproses.FileBilling.Trim());
                 if (Filex.Exists) Filex.MoveTo(BillingBackup.Trim() + Fileproses.FileBilling.Trim() + Regex.Replace(Guid.NewGuid().ToString(), "[^0-9a-zA-Z]", "").Substring(0, 8));
-                    
+
             }
             catch (Exception ex) { throw new Exception("RemoveFileBilling() : " + ex.Message); }
             finally
@@ -533,16 +535,23 @@ namespace ExecFileBilling
 
         public static void InsertTableStaging(List<DataUploadModel> DataUpload, string tableName, string FileName)
         {
-            String sqlStart = @"INSERT INTO " + tableName + "(PolisNo,Amount,ApprovalCode,Deskripsi,AccNo,AccName,IsSukses,FileName) values ";
+            String sqlStart = @"INSERT INTO " + tableName + "(PolisNo,Amount,TranDate,ApprovalCode,Deskripsi,AccNo,AccName,IsSukses,FileName) values ";
             string sql = "";
             int i = 0, j = 1;
             foreach (DataUploadModel item in DataUpload)
             {
                 if (item == null) continue;
                 i++;
-                sql = sql + string.Format(@"('{0}',{1},'{2}',NULLIF('{3}',''),'{4}','{5}',{6},'{7}'),",
-                    item.PolisNo, item.Amount, item.ApprovalCode, (item.Deskripsi == null) ? null : item.Deskripsi.Replace("'", "\\'"),
-                    item.AccNo, (item.AccName == null) ? null : item.AccName.Replace("'", "\\'"), item.IsSukses, FileName);
+                sql = sql + string.Format(@"('{0}',{1},{2},NULLIF('{3}',''),NULLIF('{4}',''),NULLIF('{5}',''),'{6}',{7},'{8}'),",
+                    item.PolisNo,
+                    item.Amount,
+                    item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd hh:mm:ss"),"'"),
+                    item.ApprovalCode,
+                    (item.Deskripsi == null) ? null : item.Deskripsi.Replace("'", "\\'").Replace("-", " "),
+                    item.AccNo,
+                    (item.AccName == null) ? null : item.AccName.Replace("'", "\\'"),
+                    item.IsSukses,
+                    FileName);
                 // eksekusi per 100 data
                 if (i == 100)
                 {
@@ -829,7 +838,7 @@ namespace ExecFileBilling
             return dataUpload;
         }
 
-        public static List<DataUploadModel> BacaFileVA_daily(string Fileproses)
+        public static List<DataUploadModel> BacaFileVA_realtime(string Fileproses)
         {
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
             using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
@@ -857,7 +866,7 @@ namespace ExecFileBilling
             return dataUpload;
         }
 
-        public static List<DataUploadModel> BacaFileVA_realtime(string Fileproses)
+        public static List<DataUploadModel> BacaFileVA_daily(string Fileproses)
         {
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
             using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
@@ -1007,7 +1016,7 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
 
             try
             {
-                GetBillingUnpaid(ref billingID,ref freq_payment, ref CashlessFeeAmount, DataProses.PolisId);
+                GetBillingUnpaid(ref billingID, ref freq_payment, ref CashlessFeeAmount, DataProses.PolisId);
                 if (billingID == "") throw new Exception("Billing Kosong....");
 
                 con.Open();
@@ -1641,9 +1650,9 @@ WHERE q.`status` IN ('A','C')
             }
         }
 
-        public static void GetBillingUnpaid(ref string BillingID,ref int freq_pay, ref decimal cashlessFee, string PolisID)
+        public static void GetBillingUnpaid(ref string BillingID, ref int freq_pay, ref decimal cashlessFee, string PolisID)
         {
-            GetLastBillingUnpaid(ref BillingID,ref freq_pay, ref cashlessFee, PolisID);
+            GetLastBillingUnpaid(ref BillingID, ref freq_pay, ref cashlessFee, PolisID);
 
             //// Create Billing jika billing tidak ada pada saat mapping (karena Approve)
             if (BillingID == "")
@@ -1664,7 +1673,7 @@ WHERE q.`status` IN ('A','C')
                 catch (Exception ex) { throw new Exception("GetBillingUnpaid() : " + ex.Message); }
                 finally { con.CloseAsync(); }
 
-                GetLastBillingUnpaid(ref BillingID,ref freq_pay, ref cashlessFee, PolisID); // pengecekan kedua setelah create billing
+                GetLastBillingUnpaid(ref BillingID, ref freq_pay, ref cashlessFee, PolisID); // pengecekan kedua setelah create billing
             }
 
             if (BillingID == "") throw new Exception("Billing Konsong setelah CreateBilling, untuk PolisID '" + PolisID + "'");
@@ -1769,6 +1778,29 @@ WHERE q.`status` IN ('A','C')
                 BillingID = cmd.ExecuteScalar().ToString();
             }
             catch (Exception ex) { throw new Exception("GetQuoteUnpaid() : " + ex.Message); }
+            finally { con.CloseAsync(); }
+        }
+
+        public static void UpdateBilling_VA_Paid(int idx, string tableName)
+        {
+            //cek data upload berdasarkan polis_no dan tgl bayar ==> tgl bayar unik pertransaksi
+            MySqlConnection con = new MySqlConnection(constring);
+            MySqlCommand cmd = new MySqlCommand()
+            {
+                CommandText= @"UPDATE "+ tableName + @" up
+                            INNER JOIN `billing` b ON b.`policy_id`=up.`PolisId` AND up.`TranDate`=b.`paid_date` AND b.`status_billing`='P'
+                            SET up.`IsExec`=1; ",
+                CommandType = CommandType.Text,
+                Connection=con,
+            };
+            cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.Int32) { Value = idx });
+
+            try
+            {
+                cmd.Connection.Open();
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex) { throw new Exception("UpdateBilling_VA_Paid() : " + ex.Message); }
             finally { con.CloseAsync(); }
         }
     }
