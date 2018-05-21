@@ -20,6 +20,7 @@ namespace ExecFileBilling
         public string PolisId { get; set; }
         public string BillingID { get; set; }
         public string BillCode { get; set; }
+        public DateTime? paid_date { get; set; }
         //public string BillStatus { get; set; }
         //public string PolisStatus { get; set; }
         //public Decimal? PremiAmount { get; set; }
