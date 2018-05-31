@@ -27,8 +27,8 @@ namespace ExecFileBilling
 
         static void Main(string[] args)
         {
-            //args = new string[] { "exec", "11" };
-            //args = new string[] { "upload", "11" };
+            //args = new string[] { "exec", "9" };
+            //args = new string[] { "upload", "10" };
 
             if (args.Count() < 1)
             {
@@ -826,11 +826,13 @@ namespace ExecFileBilling
                     if (!Decimal.TryParse(line.Substring(634, 40).Trim(), out decimal tmp1)) continue;
                     status = (line.Substring(674, 46).Trim().ToLower() == "berhasil") ? true : false;
                     var acc = line.Substring(306, 244).Trim().Split('/');
+                    var NoAcc = (acc.Length >= 2) ? acc[0] : null;
+                    var nameAcc = line.Substring(306 + NoAcc.Length+1, 244- NoAcc.Length - 1).Replace("(IDR)", string.Empty);
                     dataUpload.Add(new DataUploadModel()
                     {
                         PolisNo = line.Substring(590, 40).Trim(),
-                        AccNo = (acc.Length == 2) ? acc[0].Trim() : null,
-                        AccName = (acc.Length == 2) ? acc[1].Replace("(IDR)", string.Empty).Trim() : null,
+                        AccNo = NoAcc.Trim(),
+                        AccName = nameAcc.Trim(),
                         Amount = tmp1,
                         ApprovalCode = line.Substring(674, 46).Trim(),
                         Deskripsi = status ? line.Substring(720, panjang - 720).Trim() : null,
@@ -952,20 +954,20 @@ namespace ExecFileBilling
             cmd = new MySqlCommand(@"
 UPDATE " + tableName + @" up
 INNER JOIN `policy_billing` pb ON pb.`policy_no`=up.`PolisNo`
-LEFT JOIN `ReasonMapingGroup` rp ON rp.`ReajectReason`=up.`Deskripsi` AND up.`IsSukses`=0
-	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID`
+"+ ( (idx==2)  ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0 
+	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID` "+ (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) NOT IN ('A','X');
 
 UPDATE " + tableName + @" up
 INNER JOIN `billing_others` bo ON bo.`BillingID`=up.`PolisNo`
-LEFT JOIN `ReasonMapingGroup` rp ON rp.`ReajectReason`=up.`Deskripsi` AND up.`IsSukses`=0
-	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A',up.`RejectGroupID`=rp.`GroupRejectMappingID`
+" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
+	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='A';
 
 UPDATE " + tableName + @" up
 INNER JOIN `quote_billing` q ON q.`quote_id`=SUBSTRING_INDEX(up.`PolisNo`,'X',-1)
-LEFT JOIN `ReasonMapingGroup` rp ON rp.`ReajectReason`=up.`Deskripsi` AND up.`IsSukses`=0
-	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q',up.`RejectGroupID`=rp.`GroupRejectMappingID`
+" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
+	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
                 ", con);
             cmd.Parameters.Clear();
@@ -984,7 +986,6 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
             {
                 con.CloseAsync();
             }
-
         }
 
         public static void SubmitApproveTransaction(string tableName, List<DataSubmitModel> DataProses, FileResultModel DataHeader)
@@ -1522,31 +1523,28 @@ ORDER BY su.`PolisId`,su.`amount`;
 UPDATE " + DataHeader.stageTable + @" up
 INNER JOIN billu bu ON bu.id=up.`id`
 INNER JOIN billx bx ON bx.policy_id=bu.PolisId AND bx.seqno=bu.seqno
-LEFT JOIN `reject_reason_map` rm ON rm.`reject_code`=up.ApprovalCode
-LEFT JOIN `ReasonMapingGroup` rg ON rg.`ReajectReason`=COALESCE(up.`Deskripsi`,rm.`reject_reason_bank`)
+" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @"
 	SET up.`BillingID`=bx.BillingID,
-	up.`Deskripsi`=COALESCE(rm.`reject_reason_bank`,up.`Deskripsi`,up.`ApprovalCode`),
-	up.`RejectGroupID`=rg.`GroupRejectMappingID`
+	up.`Deskripsi`=COALESCE(rp.`ReajectReason`,up.`Deskripsi`,up.`ApprovalCode`),
+	up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.IsExec=0 AND up.IsSukses=0;
 
 # Update data upload BillingOther dari hasil mapping
 UPDATE " + DataHeader.stageTable + @" up
 INNER JOIN `billing_others` bo ON bo.`BillingID`=up.`BillingID`
-LEFT JOIN `reject_reason_map` rm ON rm.`reject_code`=up.ApprovalCode
-LEFT JOIN `ReasonMapingGroup` rg ON rg.`ReajectReason`=COALESCE(up.`Deskripsi`,rm.`reject_reason_bank`)
+" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @"
 	SET up.`BillingID`=up.`BillingID`,
-	up.`Deskripsi`=COALESCE(rm.`reject_reason_bank`,up.`Deskripsi`,up.`ApprovalCode`),
-	up.`RejectGroupID`=rg.`GroupRejectMappingID`
+	up.`Deskripsi`=COALESCE(rp.`ReajectReason`,up.`Deskripsi`,up.`ApprovalCode`),
+	up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.IsExec=0 AND up.IsSukses=0;
 
 # Update data upload Quote dari hasil mapping
 UPDATE " + DataHeader.stageTable + @" up
 INNER JOIN `quote_billing` q ON q.`quote_id`=up.`BillingID`
-LEFT JOIN `reject_reason_map` rm ON rm.`reject_code`=up.ApprovalCode
-LEFT JOIN `ReasonMapingGroup` rg ON rg.`ReajectReason`=COALESCE(up.`Deskripsi`,rm.`reject_reason_bank`)
+" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @"
 	SET up.`BillingID`=up.`BillingID`,
-	up.`Deskripsi`=COALESCE(rm.`reject_reason_bank`,up.`Deskripsi`,up.`ApprovalCode`),
-	up.`RejectGroupID`=rg.`GroupRejectMappingID`
+	up.`Deskripsi`=COALESCE(rp.`ReajectReason`,up.`Deskripsi`,up.`ApprovalCode`),
+	up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.IsExec=0 AND up.IsSukses=0;
 
 SELECT `AUTO_INCREMENT` INTO @tbid
@@ -1567,8 +1565,8 @@ INNER JOIN transaction_bank tb ON tb.`BillingID`=b.BillingID
 	SET b.`IsDownload`=0,
 	b.`LastUploadDate`=@tgl,
 	b.`PaymentTransactionID`=tb.`id`,
- 	b.`BankIdDownload`=@BankIDDwd,
-	b.`Source_download`='CC',
+ 	b.`BankIdDownload`=COALESCE(b.`BankIdDownload`,@BankIDDwd),
+	b.`Source_download`=COALESCE(b.`Source_download`,'" + DataHeader.source + @"'),
 	b.`BillingDate`=COALESCE(b.`BillingDate`,@tglSaja)
 WHERE b.`status_billing` IN ('A','C')
 	AND tb.`id` >= @tbid
