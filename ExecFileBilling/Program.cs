@@ -860,7 +860,7 @@ namespace ExecFileBilling
                     if (panjang < 720) continue;
 
                     if (!Decimal.TryParse(line.Substring(634, 40).Trim(), out decimal tmp1)) continue;
-                    status = (line.Substring(674, 46).Trim().ToLower() == "berhasil") ? true : false;
+                    status = (line.Substring(674, 46).Trim().ToLower() == "success") ? true : false;
                     var acc = line.Substring(306, 244).Trim().Split('/');
                     var NoAcc = (acc.Length >= 2) ? acc[0] : null;
                     var nameAcc = line.Substring(306 + NoAcc.Length+1, 244- NoAcc.Length - 1).Replace("(IDR)", string.Empty);
