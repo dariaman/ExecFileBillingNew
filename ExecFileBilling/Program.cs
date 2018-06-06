@@ -16,19 +16,20 @@ namespace ExecFileBilling
 {
     class Program
     {
-        static string constring = ConfigurationManager.AppSettings["DefaultDB"];
-        static string FileResult = ConfigurationManager.AppSettings["DirResult"];
-        static string FileBackup = ConfigurationManager.AppSettings["BackupResult"];
+        static readonly string constring = ConfigurationManager.AppSettings["DefaultDB"];
+        static readonly string FileResult = ConfigurationManager.AppSettings["DirResult"];
+        static readonly string FileBackup = ConfigurationManager.AppSettings["BackupResult"];
 
         static string FileBilling = ConfigurationManager.AppSettings["FileBilling"];
         static string BillingBackup = ConfigurationManager.AppSettings["BillingBackup"];
         static DateTime TglNow = DateTime.Now;
-        static DateTime Tgl = DateTime.Now.Date;
+        static readonly DateTime Tgl = DateTime.Now.Date;
+        
 
         static void Main(string[] args)
         {
-            //args = new string[] { "exec", "9" };
-            //args = new string[] { "upload", "10" };
+            //args = new string[] { "exec", "5" };
+            //args = new string[] { "upload", "5" };
 
             if (args.Count() < 1)
             {
@@ -120,13 +121,11 @@ namespace ExecFileBilling
                     else if (idx == 3) DataUpload = BacaFileMandiri_CC(FileUpload.FileName); //mandiri cc
                     else if (idx == 4 || idx == 5) DataUpload = BacaFileMega_CC(FileUpload.FileName); //mega cc
                     else if (idx == 6) DataUpload = BacaFileBNI_CC(FileUpload.FileName);  // BNI cc
-
-                    //else if (idx == 7 || idx == 8) DataUpload = BacaFileBNI(FileUpload.FileName); // cimb cc
-                    ////else if (idx == 8) DataUpload = BacaFileBNI(FileUpload.FileName); //
-                    else if (idx == 9) DataUpload = BacaFileBCA_AC(FileUpload.FileName); // bca ac
-                    else if (idx == 10) DataUpload = BacaFileMandiri_AC(FileUpload.FileName); // mandiri ac
-                    else if (idx == 11) DataUpload = BacaFileVA_daily(FileUpload.FileName); // va daily
-                    else if (idx == 12) DataUpload = BacaFileVA_realtime(FileUpload.FileName); // va realtime
+                    else if (idx >= 7 && idx <= 10) DataUpload = BacaFilCIMB_CC(FileUpload.FileName); // cimb cc
+                    else if (idx == 11) DataUpload = BacaFileBCA_AC(FileUpload.FileName); // bca ac
+                    else if (idx == 12) DataUpload = BacaFileMandiri_AC(FileUpload.FileName); // mandiri ac
+                    else if (idx == 13) DataUpload = BacaFileVA_daily(FileUpload.FileName); // va daily
+                    else if (idx == 14) DataUpload = BacaFileVA_realtime(FileUpload.FileName); // va realtime
 
                     InsertTableStaging(DataUpload, FileUpload.stageTable, FileUpload.FileName);
                     MapingData(idx, FileUpload.stageTable);
@@ -309,7 +308,7 @@ namespace ExecFileBilling
             cmd = new MySqlCommand(@"SELECT fp.* ,bs.`file_download`
                                     FROM `FileNextProcess` fp
                                     LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
-                                    WHERE fp.`FileName` IS NOT NULL 
+                                    WHERE bs.file_download IS NOT NULL
                                     AND fp.`tglProses` IS NOT NULL
                                     AND fp.`tglProses` = CURDATE() AND fp.id=@idx;", con)
             {
@@ -550,9 +549,9 @@ namespace ExecFileBilling
                     item.Amount,
                     item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd hh:mm:ss"),"'"),
                     item.ApprovalCode,
-                    (item.Deskripsi == null) ? null : item.Deskripsi.Replace("'", "\\'").Replace("-", " "),
+                    item.Deskripsi,
                     item.AccNo,
-                    (item.AccName == null) ? null : item.AccName.Replace("'", "\\'"),
+                    item.AccName,
                     item.IsSukses,
                     FileName);
                 // eksekusi per 100 data
@@ -623,6 +622,8 @@ namespace ExecFileBilling
 
         public static List<DataUploadModel> BacaFileMandiri_CC(string Fileproses)
         {
+            RegexOptions options = RegexOptions.None;
+            Regex regex = new Regex("[ ]{2,}", options);
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
 
             using (FileStream fs = new FileStream(FileResult + Fileproses, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
@@ -647,7 +648,7 @@ namespace ExecFileBilling
                     if (!Decimal.TryParse(ws.Cells[row, 3].Value.ToString().Trim(), out tmp1)) continue;
                     dataUpload.Add(new DataUploadModel()
                     {
-                        AccName = ws.Cells[row, 2].Value.ToString().Trim(),
+                        AccName = ws.Cells[row, 2].Value.ToString().Trim().Replace("'", "\\'"),
                         Amount = tmp1,
                         ApprovalCode = ws.Cells[row, 4].Value.ToString().Trim(),
                         PolisNo = ws.Cells[row, 6].Value.ToString().Trim(),
@@ -668,11 +669,11 @@ namespace ExecFileBilling
                     if (!Decimal.TryParse(ws.Cells[row, 3].Value.ToString().Trim(), out tmp1)) continue;
                     dataUpload.Add(new DataUploadModel()
                     {
-                        AccName = ws.Cells[row, 2].Value.ToString().Trim(),
+                        AccName = ws.Cells[row, 2].Value.ToString().Trim().Replace("'", "\\'"),
                         Amount = tmp1,
                         PolisNo = ws.Cells[row, 4].Value.ToString().Trim(),
                         ApprovalCode = (ws.Cells[row, 5].Value ?? "").ToString().Trim(),
-                        Deskripsi = (ws.Cells[row, 6].Value ?? "").ToString().Trim(),
+                        Deskripsi = regex.Replace(ws.Cells[row, 6].Value.ToString().Trim().Replace("-", " ").Replace("'", "\\'"), " "),
                         AccNo = ws.Cells[row, 7].Value.ToString().Trim(),
                         IsSukses = false
                     });
@@ -684,6 +685,8 @@ namespace ExecFileBilling
 
         public static List<DataUploadModel> BacaFileMega_CC(string Fileproses)
         {
+            RegexOptions options = RegexOptions.None;
+            Regex regex = new Regex("[ ]{2,}", options);
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
 
             using (FileStream fs = new FileStream(FileResult + Fileproses, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
@@ -709,11 +712,9 @@ namespace ExecFileBilling
                     var temp = ws.Cells[row, 2].Value.ToString().Trim();
                     dataUpload.Add(new DataUploadModel()
                     {
-                        //AccName = ws.Cells[row, 2].Value.ToString().Trim(),
                         Amount = tmp1,
                         ApprovalCode = ws.Cells[row, 5].Value.ToString().Trim(),
                         PolisNo = temp.Split('-').Last().Trim(),
-                        //AccNo = ws.Cells[row, 7].Value.ToString().Trim(),
                         IsSukses = true
                     });
                 }
@@ -732,11 +733,10 @@ namespace ExecFileBilling
                     var temp = ws.Cells[row, 2].Value.ToString().Trim();
                     dataUpload.Add(new DataUploadModel()
                     {
-                        //AccName = ws.Cells[row, 2].Value.ToString().Trim(),
                         Amount = tmp1,
                         ApprovalCode = ws.Cells[row, 5].Value.ToString().Trim(),
+                        Deskripsi = regex.Replace(ws.Cells[row, 6].Value.ToString().Trim().Replace("-"," ").Replace("'", "\\'"), " "),
                         PolisNo = temp.Split('-').Last().Trim(),
-                        //AccNo = ws.Cells[row, 7].Value.ToString().Trim(),
                         IsSukses = false
                     });
                 }
@@ -746,6 +746,8 @@ namespace ExecFileBilling
 
         public static List<DataUploadModel> BacaFileBNI_CC(string Fileproses)
         {
+            RegexOptions options = RegexOptions.None;
+            Regex regex = new Regex("[ ]{2,}", options);
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
 
             using (FileStream fs = new FileStream(FileResult + Fileproses, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
@@ -775,9 +777,39 @@ namespace ExecFileBilling
                         ApprovalCode = ws.Cells[row, 9].Value.ToString().Trim(),
                         PolisNo = ws.Cells[row, 7].Value.ToString().Trim(),
                         AccNo = ws.Cells[row, 4].Value.ToString().Trim(),
-                        AccName = ws.Cells[row, 5].Value.ToString().Trim(),
-                        Deskripsi = ws.Cells[row, 10].Value.ToString().Trim(),
+                        AccName = ws.Cells[row, 5].Value.ToString().Trim().Replace("'", "\\'"),
+                        Deskripsi = regex.Replace(ws.Cells[row, 10].Value.ToString().Trim().Replace("-", " ").Replace("'", "\\'"), " "),
                         IsSukses = (ws.Cells[row, 9].Value.ToString().Trim() == "") ? false : true
+                    });
+                }
+            }
+            return dataUpload;
+        }
+
+        public static List<DataUploadModel> BacaFilCIMB_CC(string Fileproses)
+        {
+            List<DataUploadModel> dataUpload = new List<DataUploadModel>();
+            using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var panjang = line.Length;
+                    if (panjang < 92) continue;
+
+                    if (!int.TryParse(line.Substring(0, 6), out int no_urut)) continue; // no urut harus angka
+                    if (!int.TryParse(line.Substring(6, 16), out int polis_file)) continue; // no polis harus angka
+                    if (!Decimal.TryParse(line.Substring(42, 8), out decimal amount_file)) continue; // amount harus deceimal
+                    var desk = line.Substring(85, panjang - 85);
+                    dataUpload.Add(new DataUploadModel()
+                    {
+                        PolisNo = polis_file.ToString(),
+                        AccNo = line.Substring(22, 16).Trim(),
+                        //AccName = line.Substring(65, 26).Trim(),
+                        Amount = amount_file,
+                        //ApprovalCode = line.Substring(85, panjang-85),
+                        Deskripsi = desk,
+                        IsSukses = (desk.ToUpper() == "APPROVE") ? true : false,
                     });
                 }
             }
@@ -786,6 +818,8 @@ namespace ExecFileBilling
 
         public static List<DataUploadModel> BacaFileBCA_AC(string Fileproses)
         {
+            RegexOptions options = RegexOptions.None;
+            Regex regex = new Regex("[ ]{2,}", options);
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
             using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
             {
@@ -800,7 +834,7 @@ namespace ExecFileBilling
                     {
                         PolisNo = line.Substring(92, 15).Trim(),
                         AccNo = line.Substring(37, 11).Trim(),
-                        AccName = line.Substring(48, 26).Trim(),
+                        AccName = line.Substring(48, 26).Trim().Replace("'", "\\'"),
                         Amount = tmp1,
                         ApprovalCode = line.Substring(129, 9).Trim(),
                         Deskripsi = line.Substring(138, 51).Trim(),
@@ -813,6 +847,8 @@ namespace ExecFileBilling
 
         public static List<DataUploadModel> BacaFileMandiri_AC(string Fileproses)
         {
+            RegexOptions options = RegexOptions.None;
+            Regex regex = new Regex("[ ]{2,}", options);
             List<DataUploadModel> dataUpload = new List<DataUploadModel>();
             using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
             {
@@ -835,7 +871,7 @@ namespace ExecFileBilling
                         AccName = nameAcc.Trim(),
                         Amount = tmp1,
                         ApprovalCode = line.Substring(674, 46).Trim(),
-                        Deskripsi = status ? line.Substring(720, panjang - 720).Trim() : null,
+                        Deskripsi = status ? line.Substring(720, panjang - 720).Trim().Replace("'","\'") : null,
                         IsSukses = status
                     });
                 }
