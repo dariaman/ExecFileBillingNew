@@ -24,12 +24,12 @@ namespace ExecFileBilling
         static string BillingBackup = ConfigurationManager.AppSettings["BillingBackup"];
         static DateTime TglNow = DateTime.Now;
         static readonly DateTime Tgl = DateTime.Now.Date;
-        
+
 
         static void Main(string[] args)
         {
             //args = new string[] { "exec", "5" };
-            //args = new string[] { "upload", "5" };
+            //args = new string[] { "upload", "7" };
 
             if (args.Count() < 1)
             {
@@ -93,31 +93,22 @@ namespace ExecFileBilling
                         Thread.Sleep(5000);
                         return;
                     }
-                    else if (!(idx == 1 || idx == 2)) KosongkanTabel(FileUpload.stageTable);
+
 
                     List<DataUploadModel> DataUpload = new List<DataUploadModel>();
-                    if (idx == 1)
+                    if (idx == 1 || idx == 2 || (idx >= 7 && idx <= 10))
                     {
                         /*
-                         * jika yg di upload bca approve, cek apakah bca reject sudah di upload ?
-                         * jika bca reject belum di upload maka langsung delete data tabel staging
+                         * untuk data yang 2 file (1 file approve dan 1 file reject)
+                         * contoh : jika yg di upload bca approve, cek apakah bca reject sudah di upload ?
+                         * jika bca reject belum di upload maka langsung delete All data tabel staging
                          */
-                        if (!CekFileInsert(2, FileUpload.stageTable)) KosongkanTabel(FileUpload.stageTable);
-                        else KosongkanSetengahTabelBCA(idx, FileUpload.stageTable);
-                        // rekam file upload
-                        DataUpload = BacaFileBCA_CC(FileUpload.FileName);
+                        if (CekOtherFileInsert(idx, FileUpload.stageTable)) KosongkanSetengahTabel(idx, FileUpload.stageTable); 
+                        else KosongkanTabel(FileUpload.stageTable);
                     }
-                    else if (idx == 2)
-                    {
-                        /*
-                         * jika yg di upload bca reject, cek apakah bca approve sudah di upload ?
-                         * jika bca approve belum di upload maka langsung delete data tabel staging
-                         */
-                        if (!CekFileInsert(1, FileUpload.stageTable)) KosongkanTabel(FileUpload.stageTable);
-                        else KosongkanSetengahTabelBCA(idx, FileUpload.stageTable);
-                        //rekam  file upload
-                        DataUpload = BacaFileBCA_CC(FileUpload.FileName);
-                    }
+                    else KosongkanTabel(FileUpload.stageTable);
+
+                    if (idx == 1 || idx == 2) DataUpload = BacaFileBCA_CC(FileUpload.FileName); //BCA cc
                     else if (idx == 3) DataUpload = BacaFileMandiri_CC(FileUpload.FileName); //mandiri cc
                     else if (idx == 4 || idx == 5) DataUpload = BacaFileMega_CC(FileUpload.FileName); //mega cc
                     else if (idx == 6) DataUpload = BacaFileBNI_CC(FileUpload.FileName);  // BNI cc
@@ -131,12 +122,12 @@ namespace ExecFileBilling
                     MapingData(idx, FileUpload.stageTable);
 
                     // check billing berdasarkan paid_date untuk va
-                    if (idx == 11 || idx == 12)  UpdateBilling_VA_Paid(idx, FileUpload.stageTable);
+                    if (idx == 11 || idx == 12) UpdateBilling_VA_Paid(idx, FileUpload.stageTable);
                 }
             }
             else if (args[0] == "exec")
             {
-                if (args.Count() == 1) ExceuteDataUpload();
+                if (args.Count() == 1) ExceuteDataUpload(); 
                 else if (args.Count() > 1)
                 {
                     if (!int.TryParse(args[1], out int idx))
@@ -189,6 +180,46 @@ namespace ExecFileBilling
             catch (Exception ex)
             {
                 throw new Exception("CekFileInsert() : " + ex.Message);
+            }
+            finally
+            {
+                con.Close();
+            }
+
+            return Isdata;
+        }
+
+        public static Boolean CekOtherFileInsert(int id, string tablename)
+        {
+            /*
+             * jika file upload ada 2 seperti bca CC, dan CIMB CC
+             * jika di upload file approve, maka yang di cek file reject dan sebaliknya
+             */
+            var Isdata = false;
+            MySqlConnection con = new MySqlConnection(constring);
+            MySqlCommand cmd;
+            cmd = new MySqlCommand(@"SELECT 1
+                                    FROM FileNextProcess fp
+                                    INNER JOIN FileNextProcess fx ON fx.`id_billing_download`=fp.`id_billing_download` AND fx.`id`<>@idx
+                                    INNER JOIN " + tablename + @" up ON up.`FileName`=fx.`FileName`
+                                    WHERE fp.`id`=@idx LIMIT 1; ", con)
+            {
+                CommandType = CommandType.Text
+            };
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.Int32) { Value = id });
+
+            try
+            {
+                con.Open();
+                using (MySqlDataReader rd = cmd.ExecuteReader())
+                {
+                    while (rd.Read()) { Isdata = true; }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("CekOtherFileInsert() : " + ex.Message);
             }
             finally
             {
@@ -342,6 +373,57 @@ namespace ExecFileBilling
             }
             catch (Exception ex) { throw new Exception("GenFile(int id) : " + ex.Message); }
             finally { con.CloseAsync(); }
+
+            return Fileproses;
+        }
+
+        public static List<FileResultModel> GenFileCC()
+        {
+            List<FileResultModel> Fileproses = new List<FileResultModel>();
+            MySqlConnection con = new MySqlConnection(constring);
+            MySqlCommand cmd;
+            cmd = new MySqlCommand(@"SELECT fp.* ,bs.`file_download`
+                                    FROM `FileNextProcess` fp
+                                    LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
+                                    WHERE fp.`FileName` IS NOT NULL fp.`source`='CC' 
+                                    AND fp.`tglProses` IS NOT NULL
+                                    AND fp.`tglProses` = CURDATE(); ", con)
+            {
+                CommandType = CommandType.Text
+            };
+            try
+            {
+                con.Open();
+                using (MySqlDataReader rd = cmd.ExecuteReader())
+                {
+                    while (rd.Read())
+                    {
+                        Fileproses.Add(new FileResultModel()
+                        {
+                            Id = Convert.ToInt32(rd["id"]),
+                            trancode = rd["trancode"].ToString(),
+                            FileName = rd["FileName"].ToString(),
+                            stageTable = rd["stageTable"].ToString(),
+                            FileBilling = rd["file_download"].ToString(),
+                            tglProses = Convert.ToDateTime(rd["tglProses"]),
+                            source = rd["source"].ToString(),
+                            bankid_receipt = Convert.ToInt32(rd["bankid_receipt"]),
+                            bankid = Convert.ToInt32(rd["bankid"]),
+                            id_billing_download = Convert.ToInt32(rd["id_billing_download"]),
+                            deskripsi = rd["deskripsi"].ToString(),
+                            tglSkrg = TglNow
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("genFile() : " + ex.Message);
+            }
+            finally
+            {
+                con.Close();
+            }
 
             return Fileproses;
         }
@@ -547,7 +629,7 @@ namespace ExecFileBilling
                 sql = sql + string.Format(@"('{0}',{1},{2},NULLIF('{3}',''),NULLIF('{4}',''),NULLIF('{5}',''),'{6}',{7},'{8}'),",
                     item.PolisNo,
                     item.Amount,
-                    item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd hh:mm:ss"),"'"),
+                    item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd hh:mm:ss"), "'"),
                     item.ApprovalCode,
                     item.Deskripsi,
                     item.AccNo,
@@ -735,7 +817,7 @@ namespace ExecFileBilling
                     {
                         Amount = tmp1,
                         ApprovalCode = ws.Cells[row, 5].Value.ToString().Trim(),
-                        Deskripsi = regex.Replace(ws.Cells[row, 6].Value.ToString().Trim().Replace("-"," ").Replace("'", "\\'"), " "),
+                        Deskripsi = regex.Replace(ws.Cells[row, 6].Value.ToString().Trim().Replace("-", " ").Replace("'", "\\'"), " "),
                         PolisNo = temp.Split('-').Last().Trim(),
                         IsSukses = false
                     });
@@ -792,24 +874,43 @@ namespace ExecFileBilling
             using (StreamReader reader = new StreamReader(File.OpenRead(FileResult + Fileproses)))
             {
                 string line;
+                int no_urut;
+                Int64 polis_file;
+                decimal amount_file;
+                int pj;
+                string ket;
+                bool status_sukses = false;
+
                 while ((line = reader.ReadLine()) != null)
                 {
                     var panjang = line.Length;
                     if (panjang < 92) continue;
 
-                    if (!int.TryParse(line.Substring(0, 6), out int no_urut)) continue; // no urut harus angka
-                    if (!int.TryParse(line.Substring(6, 16), out int polis_file)) continue; // no polis harus angka
-                    if (!Decimal.TryParse(line.Substring(42, 8), out decimal amount_file)) continue; // amount harus deceimal
+                    if (!int.TryParse(line.Substring(0, 6), out no_urut)) continue; // no urut harus angka
+                    if (!Int64.TryParse(line.Substring(6, 16), out polis_file)) continue; // no polis harus angka
+                    if (!Decimal.TryParse(line.Substring(42, 8), out amount_file)) continue; // amount harus deceimal
                     var desk = line.Substring(85, panjang - 85);
+
+                    string appCode = "";
+                    if (desk.Trim() == "APPROVE") status_sukses = true;
+                    else
+                    {
+                        appCode = desk.Substring(7, 2);
+                        pj = desk.Length;
+                        ket = desk.Substring(10, pj - 10);
+                        desk = ket;
+                        status_sukses = false;
+                    }
+
                     dataUpload.Add(new DataUploadModel()
                     {
                         PolisNo = polis_file.ToString(),
                         AccNo = line.Substring(22, 16).Trim(),
                         //AccName = line.Substring(65, 26).Trim(),
                         Amount = amount_file,
-                        //ApprovalCode = line.Substring(85, panjang-85),
+                        ApprovalCode = appCode,
                         Deskripsi = desk,
-                        IsSukses = (desk.ToUpper() == "APPROVE") ? true : false,
+                        IsSukses = status_sukses,
                     });
                 }
             }
@@ -863,7 +964,7 @@ namespace ExecFileBilling
                     status = (line.Substring(674, 46).Trim().ToLower() == "success") ? true : false;
                     var acc = line.Substring(306, 244).Trim().Split('/');
                     var NoAcc = (acc.Length >= 2) ? acc[0] : null;
-                    var nameAcc = line.Substring(306 + NoAcc.Length+1, 244- NoAcc.Length - 1).Replace("(IDR)", string.Empty);
+                    var nameAcc = line.Substring(306 + NoAcc.Length + 1, 244 - NoAcc.Length - 1).Replace("(IDR)", string.Empty);
                     dataUpload.Add(new DataUploadModel()
                     {
                         PolisNo = line.Substring(590, 40).Trim(),
@@ -871,7 +972,7 @@ namespace ExecFileBilling
                         AccName = nameAcc.Trim(),
                         Amount = tmp1,
                         ApprovalCode = line.Substring(674, 46).Trim(),
-                        Deskripsi = status ? line.Substring(720, panjang - 720).Trim().Replace("'","\'") : null,
+                        Deskripsi = status ? line.Substring(720, panjang - 720).Trim().Replace("'", "\'") : null,
                         IsSukses = status
                     });
                 }
@@ -957,14 +1058,16 @@ namespace ExecFileBilling
             }
         }
 
-        public static void KosongkanSetengahTabelBCA(int idx, string TableName)
+        public static void KosongkanSetengahTabel(int idx, string TableName)
         {
-            // hanya untuk file upload bca, karena bca filenya ada 2
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
-            cmd = new MySqlCommand(@"DELETE up FROM " + TableName + " up WHERE up.`IsSukses`=@id ;", con);
+            cmd = new MySqlCommand(@"DELETE up
+                                    FROM " + TableName + @" up
+                                    INNER JOIN `FileNextProcess` fp ON up.`FileName`=fp.`FileName`
+                                    WHERE fp.`FileName` IS NOT NULL AND fp.`tglProses` IS NOT NULL AND fp.`id`=@id ;", con);
             cmd.Parameters.Clear();
-            cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.VarChar) { Value = (idx == 1 ? idx : 0) });
+            cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.VarChar) { Value = idx });
             cmd.CommandType = CommandType.Text;
             try
             {
@@ -973,7 +1076,7 @@ namespace ExecFileBilling
             }
             catch (Exception ex)
             {
-                throw new Exception("KosongkanTabel() : " + ex.Message);
+                throw new Exception("KosongkanSetengahTabel() : " + ex.Message);
             }
             finally
             {
@@ -990,8 +1093,8 @@ namespace ExecFileBilling
             cmd = new MySqlCommand(@"
 UPDATE " + tableName + @" up
 INNER JOIN `policy_billing` pb ON pb.`policy_no`=up.`PolisNo`
-"+ ( (idx==2)  ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0 
-	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID` "+ (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
+" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0 
+	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) NOT IN ('A','X');
 
 UPDATE " + tableName + @" up
@@ -1104,7 +1207,7 @@ SELECT LAST_INSERT_ID();";
                 DataProses.receiptID = cmd.ExecuteScalar().ToString();
 
                 // Insert Polis Note Receipt
-                string pesan = "RECEIPT INPUT RP ("+ DataHeader.source+")";
+                string pesan = "RECEIPT INPUT RP (" + DataHeader.source + ")";
                 cmd.CommandType = CommandType.Text;
                 cmd.Parameters.Clear();
                 cmd.CommandText = @"insert into `prod_life21`.policy_note(policy_id, date_tran, message, staff_id) 
@@ -1137,7 +1240,7 @@ SELECT LAST_INSERT_ID();";
                     DataProses.receiptOtherID = cmd.ExecuteScalar().ToString();
 
                     // Insert Polis Note Receipt Other
-                    pesan = "RECEIPT INPUT Pengguna Cashless ("+ DataHeader.source + ")";
+                    pesan = "RECEIPT INPUT Pengguna Cashless (" + DataHeader.source + ")";
                     cmd.CommandType = CommandType.Text;
                     cmd.Parameters.Clear();
                     cmd.CommandText = @"insert into `prod_life21`.policy_note(policy_id, date_tran, message, staff_id) 
@@ -1210,7 +1313,7 @@ SELECT LAST_INSERT_ID();";
                 cmd.Parameters.Add(new MySqlParameter("@policy_note_receipt", MySqlDbType.Int32) { Value = DataProses.PolisNoteReceiptID });
                 cmd.Parameters.Add(new MySqlParameter("@policy_note_receiptOther", MySqlDbType.Int32) { Value = DataProses.PolisNoteReceiptOtherID });
                 cmd.Parameters.Add(new MySqlParameter("@uid", MySqlDbType.Int32) { Value = DataProses.TransHistory });
-                cmd.Parameters.Add(new MySqlParameter("@paid_date", MySqlDbType.DateTime) { Value = (DataHeader.source.Trim().ToUpper()=="CC" ? null : DataProses.paid_date) });
+                cmd.Parameters.Add(new MySqlParameter("@paid_date", MySqlDbType.DateTime) { Value = (DataHeader.source.Trim().ToUpper() == "CC" ? null : DataProses.paid_date) });
                 cmd.Parameters.Add(new MySqlParameter("@PaymentSource", MySqlDbType.VarChar) { Value = DataHeader.source });
                 cmd.Parameters.Add(new MySqlParameter("@ACCname", MySqlDbType.VarChar) { Value = DataProses.AccName });
                 cmd.Parameters.Add(new MySqlParameter("@ACCno", MySqlDbType.VarChar) { Value = DataProses.AccNo });
@@ -1831,11 +1934,11 @@ WHERE q.`status` IN ('A','C')
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd = new MySqlCommand()
             {
-                CommandText= @"UPDATE "+ tableName + @" up
+                CommandText = @"UPDATE " + tableName + @" up
                             INNER JOIN `billing` b ON b.`policy_id`=up.`PolisId` AND up.`TranDate`=b.`paid_date` AND b.`status_billing`='P'
                             SET up.`IsExec`=1; ",
                 CommandType = CommandType.Text,
-                Connection=con,
+                Connection = con,
             };
             cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.Int32) { Value = idx });
 
