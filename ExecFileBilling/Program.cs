@@ -28,8 +28,14 @@ namespace ExecFileBilling
 
         static void Main(string[] args)
         {
+            /*
+             * jika argument "exec 7" => maka 7 adalah id di tabel FileNextProcess
+             * jika argument "upload 7" => maka 7 adalah id di tabel FileNextProcess
+             */
+
             //args = new string[] { "exec", "5" };
             //args = new string[] { "upload", "7" };
+            //args = new string[] { "remove", "7" };
 
             if (args.Count() < 1)
             {
@@ -94,20 +100,9 @@ namespace ExecFileBilling
                         return;
                     }
 
+                    ProsesHapusDataStaging(idx, FileUpload.stageTable);
 
                     List<DataUploadModel> DataUpload = new List<DataUploadModel>();
-                    if (idx == 1 || idx == 2 || (idx >= 7 && idx <= 10))
-                    {
-                        /*
-                         * untuk data yang 2 file (1 file approve dan 1 file reject)
-                         * contoh : jika yg di upload bca approve, cek apakah bca reject sudah di upload ?
-                         * jika bca reject belum di upload maka langsung delete All data tabel staging
-                         */
-                        if (CekOtherFileInsert(idx, FileUpload.stageTable)) KosongkanSetengahTabel(idx, FileUpload.stageTable); 
-                        else KosongkanTabel(FileUpload.stageTable);
-                    }
-                    else KosongkanTabel(FileUpload.stageTable);
-
                     if (idx == 1 || idx == 2) DataUpload = BacaFileBCA_CC(FileUpload.FileName); //BCA cc
                     else if (idx == 3) DataUpload = BacaFileMandiri_CC(FileUpload.FileName); //mandiri cc
                     else if (idx == 4 || idx == 5) DataUpload = BacaFileMega_CC(FileUpload.FileName); //mega cc
@@ -123,11 +118,14 @@ namespace ExecFileBilling
 
                     // check billing berdasarkan paid_date untuk va
                     if (idx == 11 || idx == 12) UpdateBilling_VA_Paid(idx, FileUpload.stageTable);
+
+                    // hitung jumlah data upload (reject,approve)
+                    HitungJumlahDataUpload(idx, FileUpload.stageTable);
                 }
             }
             else if (args[0] == "exec")
             {
-                if (args.Count() == 1) ExceuteDataUpload(); 
+                if (args.Count() == 1) ExceuteDataUpload();
                 else if (args.Count() > 1)
                 {
                     if (!int.TryParse(args[1], out int idx))
@@ -138,6 +136,45 @@ namespace ExecFileBilling
                         return;
                     }
                     ExceuteDataUpload(idx);
+                }
+            }
+            else if (args[0] == "remove")
+            {
+                if (args.Count() < 2)
+                {
+                    Console.WriteLine("Parameter Kurang...");
+                    Console.WriteLine("Aplication exit...");
+                    Thread.Sleep(5000);
+                    return;
+                }
+                if (args[1] != "")
+                {
+                    if (!int.TryParse(args[1], out int idx))
+                    {
+                        Console.WriteLine("Parameter Salah");
+                        Console.WriteLine("Aplication exit...");
+                        Thread.Sleep(5000);
+                        return;
+                    }
+
+                    FileResultModel FileUpload = GetUploadFile(idx);
+                    try
+                    {
+                        ProsesHapusDataStaging(idx, FileUpload.stageTable);
+
+                        // hapus file fisik
+                        RemoveFileUploadResult(FileUpload);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+                        Console.WriteLine("Aplication exit...");
+                        Thread.Sleep(5000);
+                        return;
+                    }
+
+                    // hitung jumlah data upload (reject,approve), setelah di remove data 
+                    HitungJumlahDataUpload(idx, FileUpload.stageTable);
                 }
             }
             else
@@ -1036,6 +1073,21 @@ namespace ExecFileBilling
             return dataUpload;
         }
 
+        public static void ProsesHapusDataStaging(int idx, string TableName)
+        {
+            if (idx == 1 || idx == 2 || (idx >= 7 && idx <= 10))
+            {
+                /*
+                 * untuk data yang 2 file (1 file approve dan 1 file reject)
+                 * contoh : jika yg di upload bca approve, cek apakah bca reject sudah di upload ?
+                 * jika bca reject belum di upload maka langsung delete All data tabel staging
+                 */
+                if (CekOtherFileInsert(idx, TableName)) KosongkanSetengahTabel(idx, TableName);
+                else KosongkanTabel(TableName);
+            }
+            else KosongkanTabel(TableName);
+        }
+
         public static void KosongkanTabel(string TableName)
         {
             MySqlConnection con = new MySqlConnection(constring);
@@ -1124,6 +1176,35 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
             finally
             {
                 con.CloseAsync();
+            }
+        }
+
+        public static void HitungJumlahDataUpload(int idx, string TableName)
+        {
+            MySqlConnection con = new MySqlConnection(constring);
+            MySqlCommand cmd;
+            cmd = new MySqlCommand(@"SELECT COUNT(1) INTO @app FROM " + TableName + @" up WHERE up.`IsSukses`;
+                                    SELECT COUNT(1) INTO @rjt FROM " + TableName + @" up WHERE NOT up.`IsSukses`;
+
+                                    UPDATE `upload_sum` us
+                                    INNER JOIN `FileNextProcess` fp ON us.`id`=fp.`id_upload_sum`
+	                                    SET us.`count_approve`=@app,us.`count_reject`=@rjt,us.`total_upload`=@app+@rjt
+                                    WHERE fp.`id`=@idx;", con);
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.VarChar) { Value = idx });
+            cmd.CommandType = CommandType.Text;
+            try
+            {
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("HitungJumlahDataUpload() : " + ex.Message);
+            }
+            finally
+            {
+                con.Close();
             }
         }
 
