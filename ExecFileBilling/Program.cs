@@ -34,7 +34,7 @@ namespace ExecFileBilling
              */
 
             //args = new string[] { "exec", "5" };
-            //args = new string[] { "upload", "7" };
+            //args = new string[] { "upload", "13" };
             //args = new string[] { "remove", "7" };
 
             if (args.Count() < 1)
@@ -110,8 +110,14 @@ namespace ExecFileBilling
                     else if (idx >= 7 && idx <= 10) DataUpload = BacaFilCIMB_CC(FileUpload.FileName); // cimb cc
                     else if (idx == 11) DataUpload = BacaFileBCA_AC(FileUpload.FileName); // bca ac
                     else if (idx == 12) DataUpload = BacaFileMandiri_AC(FileUpload.FileName); // mandiri ac
-                    else if (idx == 13) DataUpload = BacaFileVA_daily(FileUpload.FileName); // va daily
-                    else if (idx == 14) DataUpload = BacaFileVA_realtime(FileUpload.FileName); // va realtime
+                    else if (idx == 13)
+                    {
+                        DataUpload = BacaFileVA_daily(FileUpload.FileName); // va daily
+
+                        // Jika baca va daily data kosong, maka baca format va realtime
+                        if (DataUpload.Count < 1) DataUpload = BacaFileVA_realtime(FileUpload.FileName); // va realtime
+                    }
+                    //else if (idx == 14) DataUpload = BacaFileVA_realtime(FileUpload.FileName); // va realtime
 
                     InsertTableStaging(DataUpload, FileUpload.stageTable, FileUpload.FileName);
                     MapingData(idx, FileUpload.stageTable);
@@ -1189,7 +1195,14 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
                                     UPDATE `upload_sum` us
                                     INNER JOIN `FileNextProcess` fp ON us.`id`=fp.`id_upload_sum`
 	                                    SET us.`count_approve`=@app,us.`count_reject`=@rjt,us.`total_upload`=@app+@rjt
-                                    WHERE fp.`id`=@idx;", con);
+                                    WHERE fp.`id`=@idx;
+
+                                    SELECT COUNT(1) INTO @jlh_data_file
+                                    FROM `FileNextProcess` fp
+                                    INNER JOIN " + TableName + @" up ON up.`FileName`=fp.`FileName`
+                                    WHERE fp.`id`=@idx;
+
+                                    UPDATE `FileNextProcess` fp SET fp.total_data=@jlh_data_file WHERE fp.`id`=@idx;", con);
             cmd.Parameters.Clear();
             cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.VarChar) { Value = idx });
             cmd.CommandType = CommandType.Text;
