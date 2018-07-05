@@ -33,9 +33,9 @@ namespace ExecFileBilling
              * jika argument "upload 7" => maka 7 adalah id di tabel FileNextProcess
              */
 
-            //args = new string[] { "exec", "5" };
+            //args = new string[] { "exec", "13" };
             //args = new string[] { "upload", "13" };
-            //args = new string[] { "remove", "7" };
+            //args = new string[] { "remove", "13" };
 
             if (args.Count() < 1)
             {
@@ -123,7 +123,7 @@ namespace ExecFileBilling
                     MapingData(idx, FileUpload.stageTable);
 
                     // check billing berdasarkan paid_date untuk va
-                    if (idx == 11 || idx == 12) UpdateBilling_VA_Paid(idx, FileUpload.stageTable);
+                    if (idx == 13) UpdateBilling_VA_Paid(idx, FileUpload.stageTable);
 
                     // hitung jumlah data upload (reject,approve)
                     HitungJumlahDataUpload(idx, FileUpload.stageTable);
@@ -382,7 +382,7 @@ namespace ExecFileBilling
             cmd = new MySqlCommand(@"SELECT fp.* ,bs.`file_download`
                                     FROM `FileNextProcess` fp
                                     LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
-                                    WHERE bs.file_download IS NOT NULL
+                                    WHERE fp.`FileName` IS NOT NULL
                                     AND fp.`tglProses` IS NOT NULL
                                     AND fp.`tglProses` = CURDATE() AND fp.id=@idx;", con)
             {
@@ -588,13 +588,11 @@ namespace ExecFileBilling
             cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.Int32) { Value = Fileproses.Id });
             try
             {
-                con.Open();
                 FileInfo Filex = new FileInfo(FileResult + Fileproses.FileName);
-                if (Filex.Exists)
-                {
-                    Filex.MoveTo(FileBackup + Fileproses.FileName);
-                    cmd.ExecuteNonQuery();
-                }
+                if (Filex.Exists) Filex.MoveTo(FileBackup + Fileproses.FileName);
+
+                con.Open();
+                cmd.ExecuteNonQuery();
             }
             catch (Exception ex)
             {
@@ -604,7 +602,6 @@ namespace ExecFileBilling
             {
                 con.Close();
             }
-
         }
 
         public static void RemoveFileBilling(FileResultModel Fileproses)
@@ -1200,7 +1197,7 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
                                     SELECT COUNT(1) INTO @jlh_data_file
                                     FROM `FileNextProcess` fp
                                     INNER JOIN " + TableName + @" up ON up.`FileName`=fp.`FileName`
-                                    WHERE fp.`id`=@idx;
+                                    WHERE fp.`id`=@idx AND up.`PolisId` IS NOT NULL;
 
                                     UPDATE `FileNextProcess` fp SET fp.total_data=@jlh_data_file WHERE fp.`id`=@idx;", con);
             cmd.Parameters.Clear();
@@ -2039,6 +2036,10 @@ WHERE q.`status` IN ('A','C')
             try
             {
                 cmd.Connection.Open();
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "DELETE va FROM " + tableName + @" va WHERE va.`IsExec`";
+                cmd.Parameters.Clear();
                 cmd.ExecuteNonQuery();
             }
             catch (Exception ex) { throw new Exception("UpdateBilling_VA_Paid() : " + ex.Message); }
