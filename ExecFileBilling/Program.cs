@@ -669,7 +669,7 @@ namespace ExecFileBilling
                 sql = sql + string.Format(@"('{0}',{1},{2},NULLIF('{3}',''),NULLIF('{4}',''),NULLIF('{5}',''),'{6}',{7},'{8}'),",
                     item.PolisNo,
                     item.Amount,
-                    item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd hh:mm:ss"), "'"),
+                    item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd HH:mm:ss"), "'"),
                     item.ApprovalCode,
                     item.Deskripsi,
                     item.AccNo,
