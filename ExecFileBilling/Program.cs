@@ -34,7 +34,7 @@ namespace ExecFileBilling
              */
 
             //args = new string[] { "exec", "13" };
-            //args = new string[] { "upload", "13" };
+            //args = new string[] { "upload", "1" };
             //args = new string[] { "remove", "13" };
 
             if (args.Count() < 1)
@@ -671,9 +671,9 @@ namespace ExecFileBilling
                     item.Amount,
                     item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd HH:mm:ss"), "'"),
                     item.ApprovalCode,
-                    item.Deskripsi,
+                    item.Deskripsi.Replace("'", "*"),
                     item.AccNo,
-                    item.AccName,
+                    item.AccName.Replace("'","*"),
                     item.IsSukses,
                     FileName);
                 // eksekusi per 100 data
@@ -1191,13 +1191,13 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
 
                                     UPDATE `upload_sum` us
                                     INNER JOIN `FileNextProcess` fp ON us.`id`=fp.`id_upload_sum`
-	                                    SET us.`count_approve`=@app,us.`count_reject`=@rjt,us.`total_upload`=@app+@rjt
+	                                    SET us.`count_approve`=@app, us.`count_reject`=@rjt, us.`total_upload`=@app+@rjt
                                     WHERE fp.`id`=@idx;
 
                                     SELECT COUNT(1) INTO @jlh_data_file
                                     FROM `FileNextProcess` fp
                                     INNER JOIN " + TableName + @" up ON up.`FileName`=fp.`FileName`
-                                    WHERE fp.`id`=@idx AND up.`PolisId` IS NOT NULL;
+                                    WHERE fp.`id`=@idx;
 
                                     UPDATE `FileNextProcess` fp SET fp.total_data=@jlh_data_file WHERE fp.`id`=@idx;", con);
             cmd.Parameters.Clear();
