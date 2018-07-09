@@ -34,7 +34,7 @@ namespace ExecFileBilling
              */
 
             //args = new string[] { "exec", "13" };
-            //args = new string[] { "upload", "1" };
+            //args = new string[] { "upload", "2" };
             //args = new string[] { "remove", "13" };
 
             if (args.Count() < 1)
@@ -671,9 +671,9 @@ namespace ExecFileBilling
                     item.Amount,
                     item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd HH:mm:ss"), "'"),
                     item.ApprovalCode,
-                    item.Deskripsi.Replace("'", "*"),
+                    item.Deskripsi==null ? "" : item.Deskripsi.ToString().Replace("'", "*"),
                     item.AccNo,
-                    item.AccName.Replace("'","*"),
+                    item.AccName == null ? "" : item.AccName.ToString().Replace("'","*"),
                     item.IsSukses,
                     FileName);
                 // eksekusi per 100 data
