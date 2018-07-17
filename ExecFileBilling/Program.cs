@@ -34,7 +34,7 @@ namespace ExecFileBilling
              */
 
             //args = new string[] { "exec", "11" };
-            //args = new string[] { "upload", "2" };
+            //args = new string[] { "upload", "10" };
             //args = new string[] { "remove", "13" };
 
             if (args.Count() < 1)
@@ -671,9 +671,9 @@ namespace ExecFileBilling
                     item.Amount,
                     item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd HH:mm:ss"), "'"),
                     item.ApprovalCode,
-                    item.Deskripsi==null ? "" : item.Deskripsi.ToString().Replace("'", "*"),
+                    item.Deskripsi == null ? "" : item.Deskripsi.ToString().Replace("'", "*"),
                     item.AccNo,
-                    item.AccName == null ? "" : item.AccName.ToString().Replace("'","*"),
+                    item.AccName == null ? "" : item.AccName.ToString().Replace("'", "*"),
                     item.IsSukses,
                     FileName);
                 // eksekusi per 100 data
@@ -915,7 +915,7 @@ namespace ExecFileBilling
             {
                 string line;
                 int no_urut;
-                Int64 polis_file;
+                //Int64 polis_file;
                 decimal amount_file;
                 int pj;
                 string ket;
@@ -924,27 +924,31 @@ namespace ExecFileBilling
                 while ((line = reader.ReadLine()) != null)
                 {
                     var panjang = line.Length;
-                    if (panjang < 92) continue;
+                    if (panjang < 85) continue;
 
                     if (!int.TryParse(line.Substring(0, 6), out no_urut)) continue; // no urut harus angka
-                    if (!Int64.TryParse(line.Substring(6, 16), out polis_file)) continue; // no polis harus angka
+                    //if (!Int64.TryParse(line.Substring(6, 16), out polis_file)) continue; // no polis harus angka
                     if (!Decimal.TryParse(line.Substring(42, 8), out amount_file)) continue; // amount harus deceimal
-                    var desk = line.Substring(85, panjang - 85);
+                    var desk = (panjang > 85 ? line.Substring(85, panjang - 85) : "");
 
                     string appCode = "";
-                    if (desk.Trim() == "APPROVE") status_sukses = true;
+                    if (desk.Trim() == "APPROVE")
+                    {
+                        status_sukses = true;
+                        appCode = desk.Trim();
+                    }
                     else
                     {
-                        appCode = desk.Substring(7, 2);
+                        appCode = (desk.Length >= 9 ? desk.Substring(7, 2) : "");
                         pj = desk.Length;
-                        ket = desk.Substring(10, pj - 10);
+                        ket = (pj > 10 ? desk.Substring(10, pj - 10) : "");
                         desk = ket;
                         status_sukses = false;
                     }
 
                     dataUpload.Add(new DataUploadModel()
                     {
-                        PolisNo = polis_file.ToString(),
+                        PolisNo = line.Substring(6, 16).TrimStart('0'),
                         AccNo = line.Substring(22, 16).Trim(),
                         //AccName = line.Substring(65, 26).Trim(),
                         Amount = amount_file,
