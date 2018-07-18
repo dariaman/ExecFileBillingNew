@@ -1894,7 +1894,6 @@ WHERE q.`status` IN ('A','C')
             try
             {
                 var Fileproses = GenFile(id);
-                //MapingData(Fileproses.Id, Fileproses.stageTable);
                 if (Fileproses == null) return;
 
                 DataProses = new List<DataSubmitModel>();
@@ -1902,16 +1901,55 @@ WHERE q.`status` IN ('A','C')
                 if (DataProses.Count > 0) SubmitApproveTransaction(Fileproses.stageTable, DataProses, Fileproses);
 
                 //Proses yang reject
-                if (id != 1) SubmitRejectTransaction(Fileproses);
+                if (id != 1 && id != 7 && id != 9) SubmitRejectTransaction(Fileproses);
+                if (Fileproses.source == "AC") { HoldBillingACReject(Fileproses.stageTable); }
 
                 RemoveFileUploadResult(Fileproses);
                 RemoveFileBilling(Fileproses);
-
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
                 Thread.Sleep(5000);
+            }
+        }
+
+        public static void HoldBillingACReject(string TableName)
+        {
+            MySqlConnection con = new MySqlConnection(constring);
+            MySqlCommand cmd;
+            cmd = new MySqlCommand(@"
+                            DROP TEMPORARY TABLE IF EXISTS bill_Upload;
+                            CREATE TEMPORARY TABLE bill_Upload AS
+                            SELECT up.`PolisId`,
+                            CASE WHEN bh.`ReleaseDate` > DATE_ADD(CURDATE(), INTERVAL 15 DAY) THEN bh.`ReleaseDate` ELSE DATE_ADD(CURDATE(), INTERVAL 15 DAY) END AS new_release,
+                            CASE WHEN bh.`ReleaseDate` > DATE_ADD(CURDATE(), INTERVAL 15 DAY) THEN bh.`Description` ELSE 'Auto Hold, Reject Debet AC  Recurring' END AS new_desc
+                            FROM " + TableName + @" up
+                            LEFT JOIN `billinghold` bh ON bh.`policy_Id`=up.`PolisId`
+                            WHERE NOT up.`IsSukses`;
+
+                            INSERT INTO `billinghold`(`policy_Id`,`ReleaseDate`,`Description`,`UserCrt`)
+                            SELECT PolisId,new_release,new_desc,'system' 
+                            FROM billx bx
+                            ON DUPLICATE KEY UPDATE `ReleaseDate`=bx.new_release,
+			                            `Description`=bx.new_desc,
+			                            `DateUpdate`=CURDATE(),
+			                            `UserUpdate`='system'; ", con);
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.VarChar) { Value = 0 });
+            cmd.CommandType = CommandType.Text;
+            try
+            {
+                con.Open();
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("HoldBillingACReject() : " + ex.Message);
+            }
+            finally
+            {
+                con.Close();
             }
         }
 
