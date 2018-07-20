@@ -192,7 +192,7 @@ namespace ExecFileBilling
 
             Console.WriteLine();
             Console.WriteLine("F I N I S H . . . ");
-            Thread.Sleep(5000);
+            //Thread.Sleep(5000);
         }
 
         public static Boolean CekFileInsert(int id, string tablename)
@@ -573,7 +573,7 @@ namespace ExecFileBilling
             if (DataProses.Count < 1) Console.Write("=> Kosong");
             else Console.Write(DataProses.Count.ToString());
             Console.WriteLine();
-            Thread.Sleep(5000);
+            //Thread.Sleep(5000);
             return DataProses;
         }
 
@@ -1869,14 +1869,14 @@ WHERE q.`status` IN ('A','C')
                     foreach (FileResultModel item in Fileproses)
                     {
                         //MapingData(item.Id, item.stageTable);
-                        Thread.Sleep(5000);
+                        //Thread.Sleep(5000);
                         DataProses = new List<DataSubmitModel>();
                         if (item.Id != 2) DataProses = PoolDataProsesApprove(item.Id, item.stageTable);
 
                         if (DataProses.Count > 0) SubmitApproveTransaction(item.stageTable, DataProses, item);
 
                         //Proses yang reject
-                        if (item.Id > 1) SubmitRejectTransaction(item);
+                        if (item.Id != 1 && item.Id != 7 && item.Id != 9) SubmitRejectTransaction(item);
 
                         RemoveFileUploadResult(item);
                         RemoveFileBilling(item);
