@@ -34,7 +34,7 @@ namespace ExecFileBilling
              */
 
             //args = new string[] { "exec", "11" };
-            //args = new string[] { "upload", "10" };
+            //args = new string[] { "upload", "11" };
             //args = new string[] { "remove", "13" };
 
             if (args.Count() < 1)
@@ -1930,13 +1930,11 @@ WHERE q.`status` IN ('A','C')
 
                             INSERT INTO `billinghold`(`policy_Id`,`ReleaseDate`,`Description`,`UserCrt`)
                             SELECT PolisId,new_release,new_desc,'system' 
-                            FROM billx bx
+                            FROM bill_Upload bx
                             ON DUPLICATE KEY UPDATE `ReleaseDate`=bx.new_release,
 			                            `Description`=bx.new_desc,
 			                            `DateUpdate`=CURDATE(),
 			                            `UserUpdate`='system'; ", con);
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new MySqlParameter("@id", MySqlDbType.VarChar) { Value = 0 });
             cmd.CommandType = CommandType.Text;
             try
             {
