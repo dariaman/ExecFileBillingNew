@@ -1699,7 +1699,6 @@ SELECT LAST_INSERT_ID();";
                                                         `PaidAmount`=@PaidAmount,
                                                         BankIdPaid=@bankid,
         			                                    `LastUploadDate`=@tgl,
-                                                        `cancel_date`=null,
                                                         `paid_dt`=DATE(@tgl),
         			                                    `PaymentTransactionID`=@uid,
                                                         UserUpload='system'
