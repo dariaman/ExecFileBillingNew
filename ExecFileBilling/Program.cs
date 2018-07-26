@@ -33,7 +33,7 @@ namespace ExecFileBilling
              * jika argument "upload 7" => maka 7 adalah id di tabel FileNextProcess
              */
 
-            //args = new string[] { "exec", "11" };
+            //args = new string[] { "exec", "5" };
             //args = new string[] { "upload", "11" };
             //args = new string[] { "remove", "13" };
 
@@ -1190,8 +1190,8 @@ WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
         {
             MySqlConnection con = new MySqlConnection(constring);
             MySqlCommand cmd;
-            cmd = new MySqlCommand(@"SELECT COUNT(1) INTO @app FROM " + TableName + @" up WHERE up.`IsSukses`;
-                                    SELECT COUNT(1) INTO @rjt FROM " + TableName + @" up WHERE NOT up.`IsSukses`;
+            cmd = new MySqlCommand(@"SELECT COUNT(1) INTO @app FROM " + TableName + @" up WHERE up.`IsSukses` AND COALESCE(up.`PolisId`,up.`BillingID`) IS NOT NULL AND up.`BillCode` IS NOT NULL;
+                                    SELECT COUNT(1) INTO @rjt FROM " + TableName + @" up WHERE NOT up.`IsSukses` AND COALESCE(up.`PolisId`,up.`BillingID`) IS NOT NULL AND up.`BillCode` IS NOT NULL;
 
                                     UPDATE `upload_sum` us
                                     INNER JOIN `FileNextProcess` fp ON us.`id`=fp.`id_upload_sum`
