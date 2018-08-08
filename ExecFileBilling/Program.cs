@@ -34,7 +34,7 @@ namespace ExecFileBilling
              */
 
             //args = new string[] { "exec", "5" };
-            //args = new string[] { "upload", "11" };
+            //args = new string[] { "upload", "13" };
             //args = new string[] { "remove", "13" };
 
             if (args.Count() < 1)
@@ -666,7 +666,7 @@ namespace ExecFileBilling
             {
                 if (item == null) continue;
                 i++;
-                sql = sql + string.Format(@"('{0}',{1},{2},NULLIF('{3}',''),NULLIF('{4}',''),NULLIF('{5}',''),'{6}',{7},'{8}'),",
+                sql = sql + string.Format(@"('{0}',{1},{2},NULLIF('{3}',''),NULLIF('{4}',''),NULLIF('{5}',''),NULLIF('{6}',''),{7},'{8}'),",
                     item.PolisNo,
                     item.Amount,
                     item.TglPaid == null ? "NULL" : string.Concat("'", item.TglPaid.Value.ToString("yyyy-MM-dd HH:mm:ss"), "'"),
