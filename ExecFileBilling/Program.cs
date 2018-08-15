@@ -33,7 +33,7 @@ namespace ExecFileBilling
              * jika argument "upload 7" => maka 7 adalah id di tabel FileNextProcess
              */
 
-            //args = new string[] { "exec", "5" };
+            //args = new string[] { "exec", "2" };
             //args = new string[] { "upload", "13" };
             //args = new string[] { "remove", "13" };
 
@@ -333,10 +333,12 @@ namespace ExecFileBilling
                                     LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
                                     WHERE fp.`FileName` IS NOT NULL 
                                     AND fp.`tglProses` IS NOT NULL
-                                    AND fp.`tglProses` = CURDATE(); ", con)
+                                    AND fp.`tglProses` = @tgl_now; ", con)
             {
                 CommandType = CommandType.Text
             };
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@tgl_now", MySqlDbType.Date) { Value = TglNow });
             try
             {
                 con.Open();
@@ -384,10 +386,12 @@ namespace ExecFileBilling
                                     LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
                                     WHERE fp.`FileName` IS NOT NULL
                                     AND fp.`tglProses` IS NOT NULL
-                                    AND fp.`tglProses` = CURDATE() AND fp.id=@idx;", con)
+                                    AND fp.`tglProses` = @tgl_now AND fp.id=@idx;", con)
             {
                 CommandType = CommandType.Text
             };
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@tgl_now", MySqlDbType.Date) { Value = TglNow });
             cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.Int32) { Value = id });
             try
             {
@@ -430,10 +434,12 @@ namespace ExecFileBilling
                                     LEFT JOIN `billing_download_summary` bs ON bs.`id`=fp.`id_billing_download`
                                     WHERE fp.`FileName` IS NOT NULL fp.`source`='CC' 
                                     AND fp.`tglProses` IS NOT NULL
-                                    AND fp.`tglProses` = CURDATE(); ", con)
+                                    AND fp.`tglProses` = @tgl_now; ", con)
             {
                 CommandType = CommandType.Text
             };
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@tgl_now", MySqlDbType.Date) { Value = TglNow });
             try
             {
                 con.Open();
@@ -482,7 +488,7 @@ namespace ExecFileBilling
                                     FROM `FileNextProcess` fp
                                     INNER JOIN " + tableName + @" u ON u.`FileName`=fp.`FileName`
                                     WHERE fp.`id`=@idx AND fp.`FileName` IS NOT NULL AND fp.`tglProses` IS NOT NULL
-                                    AND fp.`tglProses`=CURDATE() AND u.`IsExec`=0 AND u.`IsSukses`=1 AND u.BillCode='B' 
+                                    AND fp.`tglProses`=@tgl_now AND u.`IsExec`=0 AND u.`IsSukses`=1 AND u.BillCode='B' 
                                     ORDER BY u.`PolisId`,u.`Amount`;")
             {
                 CommandType = CommandType.Text,
@@ -490,6 +496,7 @@ namespace ExecFileBilling
             };
             cmd.Parameters.Clear();
             cmd.Parameters.Add(new MySqlParameter("@idx", MySqlDbType.Int32) { Value = id });
+            cmd.Parameters.Add(new MySqlParameter("@tgl_now", MySqlDbType.Date) { Value = TglNow });
 
             try
             {
@@ -1152,20 +1159,20 @@ namespace ExecFileBilling
             cmd = new MySqlCommand(@"
 UPDATE " + tableName + @" up
 INNER JOIN `policy_billing` pb ON pb.`policy_no`=up.`PolisNo`
-" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0 
-	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
+" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0 
+	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`RejectReason`" : "") + @"
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) NOT IN ('A','X');
 
 UPDATE " + tableName + @" up
 INNER JOIN `billing_others` bo ON bo.`BillingID`=up.`PolisNo`
-" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
-	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
+" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
+	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`RejectReason`" : "") + @"
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='A';
 
 UPDATE " + tableName + @" up
 INNER JOIN `quote_billing` q ON q.`quote_id`=SUBSTRING_INDEX(up.`PolisNo`,'X',-1)
-" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
-	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`ReajectReason`" : "") + @"
+" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
+	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`RejectReason`" : "") + @"
 WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
                 ", con);
             cmd.Parameters.Clear();
@@ -1437,7 +1444,7 @@ SELECT LAST_INSERT_ID();";
                 cmd.Parameters.Add(new MySqlParameter("@ACCno", MySqlDbType.VarChar) { Value = DataProses.AccNo });
                 cmd.Parameters.Add(new MySqlParameter("@idBill", MySqlDbType.Int32) { Value = billingID });
                 cmd.ExecuteNonQuery();
-                
+
                 // Kasi Flag di data upload 
                 cmd.CommandType = CommandType.Text;
                 cmd.Parameters.Clear();
@@ -1758,27 +1765,27 @@ ORDER BY su.`PolisId`,su.`amount`;
 UPDATE " + DataHeader.stageTable + @" up
 INNER JOIN billu bu ON bu.id=up.`id`
 INNER JOIN billx bx ON bx.policy_id=bu.PolisId AND bx.seqno=bu.seqno
-" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @"
+" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @"
 	SET up.`BillingID`=bx.BillingID,
-	up.`Deskripsi`=COALESCE(rp.`ReajectReason`,up.`Deskripsi`,up.`ApprovalCode`),
+	up.`Deskripsi`=COALESCE(rp.`RejectReason`,up.`Deskripsi`,up.`ApprovalCode`),
 	up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.IsExec=0 AND up.IsSukses=0;
 
 # Update data upload BillingOther dari hasil mapping
 UPDATE " + DataHeader.stageTable + @" up
 INNER JOIN `billing_others` bo ON bo.`BillingID`=up.`BillingID`
-" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @"
+" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @"
 	SET up.`BillingID`=up.`BillingID`,
-	up.`Deskripsi`=COALESCE(rp.`ReajectReason`,up.`Deskripsi`,up.`ApprovalCode`),
+	up.`Deskripsi`=COALESCE(rp.`RejectReason`,up.`Deskripsi`,up.`ApprovalCode`),
 	up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.IsExec=0 AND up.IsSukses=0;
 
 # Update data upload Quote dari hasil mapping
 UPDATE " + DataHeader.stageTable + @" up
 INNER JOIN `quote_billing` q ON q.`quote_id`=up.`BillingID`
-" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`ReajectReason`=up.`Deskripsi`") + @"
+" + ((DataHeader.Id == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @"
 	SET up.`BillingID`=up.`BillingID`,
-	up.`Deskripsi`=COALESCE(rp.`ReajectReason`,up.`Deskripsi`,up.`ApprovalCode`),
+	up.`Deskripsi`=COALESCE(rp.`RejectReason`,up.`Deskripsi`,up.`ApprovalCode`),
 	up.`RejectGroupID`=rp.`GroupRejectMappingID`
 WHERE up.IsExec=0 AND up.IsSukses=0;
 
@@ -1900,8 +1907,8 @@ WHERE q.`status` IN ('A','C')
                             DROP TEMPORARY TABLE IF EXISTS bill_Upload;
                             CREATE TEMPORARY TABLE bill_Upload AS
                             SELECT up.`PolisId`,
-                            CASE WHEN bh.`ReleaseDate` > DATE_ADD(CURDATE(), INTERVAL 15 DAY) THEN bh.`ReleaseDate` ELSE DATE_ADD(CURDATE(), INTERVAL 15 DAY) END AS new_release,
-                            CASE WHEN bh.`ReleaseDate` > DATE_ADD(CURDATE(), INTERVAL 15 DAY) THEN bh.`Description` ELSE 'Auto Hold, Reject Debet AC  Recurring' END AS new_desc
+                            CASE WHEN bh.`ReleaseDate` > DATE_ADD(@tgl_now, INTERVAL 15 DAY) THEN bh.`ReleaseDate` ELSE DATE_ADD(@tgl_now, INTERVAL 15 DAY) END AS new_release,
+                            CASE WHEN bh.`ReleaseDate` > DATE_ADD(@tgl_now, INTERVAL 15 DAY) THEN bh.`Description` ELSE 'Auto Hold, Reject Debet AC  Recurring' END AS new_desc
                             FROM " + TableName + @" up
                             LEFT JOIN `billinghold` bh ON bh.`policy_Id`=up.`PolisId`
                             WHERE NOT up.`IsSukses`;
@@ -1914,6 +1921,8 @@ WHERE q.`status` IN ('A','C')
 			                            `DateUpdate`=CURDATE(),
 			                            `UserUpdate`='system'; ", con);
             cmd.CommandType = CommandType.Text;
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@tgl_now", MySqlDbType.Date) { Value = TglNow });
             try
             {
                 con.Open();
