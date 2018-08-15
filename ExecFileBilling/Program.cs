@@ -1437,28 +1437,7 @@ SELECT LAST_INSERT_ID();";
                 cmd.Parameters.Add(new MySqlParameter("@ACCno", MySqlDbType.VarChar) { Value = DataProses.AccNo });
                 cmd.Parameters.Add(new MySqlParameter("@idBill", MySqlDbType.Int32) { Value = billingID });
                 cmd.ExecuteNonQuery();
-
-                // Update Polis Last Transaction JBS
-                cmd.CommandType = CommandType.Text;
-                cmd.Parameters.Clear();
-                cmd.CommandText = @"INSERT INTO `policy_last_trans`(`policy_Id`,`BillingID`,`BillingDate`,`recurring_seq`,`due_dt_pre`,`source`,`receipt_id`,`receipt_date`,`bank_id`,`UserCrt`)
-                            SELECT bx.policy_id, bx.`BillingID`,bx.`BillingDate`,bx.`recurring_seq`,bx.`due_dt_pre`,bx.`PaymentSource`,bx.`ReceiptID`,@tgl,bx.`BankIdDownload`,@usercrt
-                            FROM `billing` AS bx
-                            LEFT JOIN `policy_last_trans` AS pt ON bx.policy_id=pt.policy_Id
-                            WHERE bx.BillingID=@idBill
-                            ON DUPLICATE KEY UPDATE `BillingID`=bx.`BillingID`,
-	                            `BillingDate`=bx.`BillingDate`,
-	                            `recurring_seq`=bx.`recurring_seq`,
-	                            `due_dt_pre`=bx.`due_dt_pre`,
-	                            `source`=bx.`PaymentSource`,
-	                            `receipt_id`=bx.`ReceiptID`,
-	                            `receipt_date`=@tgl,
-	                            `bank_id`=bx.`BankIdDownload`,
-	                            `UserCrt`='system';";
-                cmd.Parameters.Add(new MySqlParameter("@idBill", MySqlDbType.VarChar) { Value = billingID });
-                cmd.Parameters.Add(new MySqlParameter("@tgl", MySqlDbType.DateTime) { Value = DataHeader.tglSkrg });
-                cmd.ExecuteNonQuery();
-
+                
                 // Kasi Flag di data upload 
                 cmd.CommandType = CommandType.Text;
                 cmd.Parameters.Clear();
