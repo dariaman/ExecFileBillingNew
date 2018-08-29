@@ -34,7 +34,7 @@ namespace ExecFileBilling
              */
 
             //args = new string[] { "exec", "2" };
-            //args = new string[] { "upload", "13" };
+            //args = new string[] { "upload", "2" };
             //args = new string[] { "remove", "13" };
 
             if (args.Count() < 1)
@@ -120,7 +120,7 @@ namespace ExecFileBilling
                     //else if (idx == 14) DataUpload = BacaFileVA_realtime(FileUpload.FileName); // va realtime
 
                     InsertTableStaging(DataUpload, FileUpload.stageTable, FileUpload.FileName);
-                    MapingData(idx, FileUpload.stageTable);
+                    MapingData(idx, FileUpload.stageTable, FileUpload.bankid);
 
                     // check billing berdasarkan paid_date untuk va
                     if (idx == 13) UpdateBilling_VA_Paid(idx, FileUpload.stageTable);
@@ -1150,7 +1150,7 @@ namespace ExecFileBilling
             }
         }
 
-        public static void MapingData(int idx, string tableName)
+        public static void MapingData(int idx, string tableName, int bank_id)
         {
             Console.WriteLine("Mapping data  ...");
             MySqlConnection con = new MySqlConnection(constring);
@@ -1159,23 +1159,40 @@ namespace ExecFileBilling
             cmd = new MySqlCommand(@"
 UPDATE " + tableName + @" up
 INNER JOIN `policy_billing` pb ON pb.`policy_no`=up.`PolisNo`
-" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0 
-	SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`RejectReason`" : "") + @"
-WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) NOT IN ('A','X');
+    SET up.`PolisId`=pb.`policy_Id`,up.`BillCode`='B'
+WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) NOT IN ('A','X') AND COALESCE(up.`PolisId`,up.`BillingID`) IS NULL ;
 
 UPDATE " + tableName + @" up
 INNER JOIN `billing_others` bo ON bo.`BillingID`=up.`PolisNo`
-" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
-	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`RejectReason`" : "") + @"
-WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='A';
+	SET up.`BillingID`=up.`PolisNo`,up.`BillCode`='A'
+WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='A' AND COALESCE(up.`PolisId`,up.`BillingID`) IS NULL ;
 
 UPDATE " + tableName + @" up
 INNER JOIN `quote_billing` q ON q.`quote_id`=SUBSTRING_INDEX(up.`PolisNo`,'X',-1)
-" + ((idx == 2) ? "LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode`" : "LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi`") + @" AND up.`IsSukses`=0
-	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q',up.`RejectGroupID`=rp.`GroupRejectMappingID` " + (idx == 2 ? ",up.`Deskripsi`=rp.`RejectReason`" : "") + @"
-WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X';
+	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q'
+WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X' AND COALESCE(up.`PolisId`,up.`BillingID`) IS NULL ;
+
+
+UPDATE " + tableName + @" up
+INNER JOIN `quote_billing` q ON q.`ref_no`=up.`PolisNo` AND q.`status`<>'P'
+	SET up.`BillingID`=q.`quote_id`,up.`BillCode`='Q'
+WHERE up.`IsExec`=0 AND LEFT(up.`PolisNo`,1) ='X' AND COALESCE(up.`PolisId`,up.`BillingID`) IS NULL ;
+
+# update reject mapping deskripsi dan group reject
+
+UPDATE " + tableName + @" up
+LEFT JOIN `reason_maping_group` rp ON rp.`RejectCode`=up.`ApprovalCode` AND up.`IsSukses`=0 AND rp.`bank_id`=@bank_id
+	set up.`RejectGroupID`=rp.`GroupRejectMappingID` ,up.`Deskripsi`=rp.`RejectReason`
+WHERE up.`IsExec`=0 AND COALESCE(up.`RejectGroupID`,up.`Deskripsi`) IS NULL;
+
+UPDATE " + tableName + @" up
+LEFT JOIN `reason_maping_group` rp ON rp.`RejectReason`=up.`Deskripsi` AND up.`IsSukses`=0 AND COALESCE(rp.`bank_id`,0)=0
+	set up.`RejectGroupID`=rp.`GroupRejectMappingID` ,up.`Deskripsi`=rp.`RejectReason`
+WHERE up.`IsExec`=0 AND up.`RejectGroupID` IS NULL;
+
                 ", con);
             cmd.Parameters.Clear();
+            cmd.Parameters.Add(new MySqlParameter("@bank_id", MySqlDbType.Int32) { Value = bank_id });
             cmd.CommandType = CommandType.Text;
 
             try
